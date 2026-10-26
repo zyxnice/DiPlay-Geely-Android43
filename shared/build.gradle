@@ -1,6 +1,29 @@
 plugins {
     id 'com.android.library'
 }
+
+abstract class PackageGeelyUsbHelper extends DefaultTask {
+    @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getDexDirectory()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDirectory()
+
+    @TaskAction
+    void packageHelper() {
+        def source = new File(dexDirectory.get().asFile, 'classes.dex')
+        def header = 'dex\n035\u0000'.getBytes('US-ASCII')
+        if (!source.isFile() || source.length() < 8 ||
+                !Arrays.equals(Arrays.copyOf(source.bytes, 8), header)) {
+            throw new GradleException('Geely helper must be a nonempty standalone DEX035 asset')
+        }
+        def destination = new File(outputDirectory.get().asFile, 'geely-usb/helper.dex')
+        destination.parentFile.mkdirs()
+        java.nio.file.Files.copy(source.toPath(), destination.toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+}
 android {
     namespace = 'com.shilapi.xcertplay.shared'
     compileSdk = 37
@@ -34,6 +57,60 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
+    buildTypes {
+        geelyUsb {
+            initWith debug
+            matchingFallbacks = ['debug']
+        }
+    }
+}
+
+// app_process on API 18 cannot resolve helper classes from the APK's multidex loader.
+// Compile only the helper and its two pure-Java contracts against the actual API-18 stubs.
+def geelyHelperClasses = layout.buildDirectory.dir('intermediates/geelyUsbHelper/classes')
+def geelyHelperDex = layout.buildDirectory.dir('intermediates/geelyUsbHelper/dex')
+def geelyHelperAssets = layout.buildDirectory.dir('generated/geelyUsbHelper/assets')
+def geelySdkDirectory = androidComponents.sdkComponents.sdkDirectory.get().asFile
+def geelyAndroidJar = new File(geelySdkDirectory, 'platforms/android-18/android.jar')
+def compileGeelyUsbHelper = tasks.register('compileGeelyUsbHelper', JavaCompile) {
+    source files(
+        'src/main/java/com/shilapi/xcertplay/compat/GeelyUsbFdHelper.java',
+        'src/main/java/com/shilapi/xcertplay/compat/GeelyUsbIdentity.java',
+        'src/main/java/com/shilapi/xcertplay/compat/GeelyUsbDescriptorParser.java')
+    classpath = files()
+    options.bootstrapClasspath = files(geelyAndroidJar)
+    options.encoding = 'UTF-8'
+    sourceCompatibility = '1.8'
+    targetCompatibility = '1.8'
+    destinationDirectory = geelyHelperClasses
+}
+def dexGeelyUsbHelper = tasks.register('dexGeelyUsbHelper', JavaExec) {
+    dependsOn compileGeelyUsbHelper
+    classpath = files(new File(geelySdkDirectory, "build-tools/${android.buildToolsVersion}/lib/d8.jar"))
+    mainClass = 'com.android.tools.r8.D8'
+    inputs.dir(geelyHelperClasses)
+    inputs.file(geelyAndroidJar)
+    outputs.dir(geelyHelperDex)
+    doFirst {
+        geelyHelperDex.get().asFile.mkdirs()
+        java.nio.file.Files.deleteIfExists(new File(geelyHelperDex.get().asFile, 'classes.dex').toPath())
+        args = ['--min-api', '18', '--lib', geelyAndroidJar.absolutePath,
+                '--output', geelyHelperDex.get().asFile.absolutePath]
+        def classFiles = []
+        geelyHelperClasses.get().asFile.eachFileRecurse(groovy.io.FileType.FILES) {
+            if (it.name.endsWith('.class')) classFiles.add(it.absolutePath)
+        }
+        args += classFiles.sort()
+    }
+}
+def packageGeelyUsbHelper = tasks.register('packageGeelyUsbHelper', PackageGeelyUsbHelper) {
+    dependsOn dexGeelyUsbHelper
+    dexDirectory = geelyHelperDex
+    outputDirectory = geelyHelperAssets
+}
+androidComponents.onVariants(androidComponents.selector().withBuildType('geelyUsb')) { variant ->
+    variant.sources.assets.addGeneratedSourceDirectory(packageGeelyUsbHelper) { it.outputDirectory }
 }
 dependencies {
     compileOnly libs.androidx.annotation

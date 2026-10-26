@@ -4,6 +4,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.os.Build
 import com.shilapi.xcertplay.compat.UsbCompat
+import com.shilapi.xcertplay.compat.GeelyUsbDeviceAccess
 
 /**
  * A platform-independent view of the device's active USB configuration.
@@ -45,7 +46,8 @@ object UsbDeviceLayoutReader {
      * UsbDeviceConnection.getRawDescriptors() has existed since API 13, so it is reachable on 4.3;
      * it is read reflectively only to keep the call site off the typed accessor list.
      */
-    fun rawDescriptors(connection: UsbDeviceConnection): ByteArray = runCatching {
+    fun rawDescriptors(connection: UsbDeviceConnection): ByteArray =
+        GeelyUsbDeviceAccess.descriptorsFor(connection) ?: runCatching {
         UsbDeviceConnection::class.java.getMethod("getRawDescriptors").invoke(connection) as? ByteArray
     }.getOrNull() ?: ByteArray(0)
 

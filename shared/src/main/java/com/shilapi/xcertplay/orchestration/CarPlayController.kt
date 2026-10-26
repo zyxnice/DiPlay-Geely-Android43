@@ -193,6 +193,7 @@ class CarPlayController(
     @Volatile private var uiStatusReporter: ((CarPlayStatus) -> Unit)? = reportStatus
     private val permissionGrant = AtomicBoolean(false)
     private val availabilityPollGeneration = AtomicInteger(0)
+    private var lastUsbDiscoverySummary: String? = null
     private var permissionPollGeneration = 0
     private var reenumerationAttempts = 0
     private var lastReportedStatus: CarPlayStatus? = null
@@ -1387,23 +1388,56 @@ class CarPlayController(
         availabilityPollGeneration.incrementAndGet()
         phase = Phase.IPHONE
         reenumerationAttempts = 0
+        lastUsbDiscoverySummary = null
+        debugLog(
+            "wired discovery 8600Bypass=${iphoneHost.supportsKernelDiscovery()} " +
+                "api=${android.os.Build.VERSION.SDK_INT} board=${android.os.Build.BOARD} " +
+                "display=${android.os.Build.DISPLAY}",
+        )
         onStatus(CarPlayStatus.DiscoveringIphone)
         checkIphoneAvailability()
     }
 
     private fun checkIphoneAvailability() {
-        if (closed || phase != Phase.IPHONE) return
-        val device = iphoneHost.discover().firstOrNull()
-        if (device == null) {
-            onStatus(CarPlayStatus.WaitingForIphone)
-            scheduleAvailabilityPoll(Phase.IPHONE, ::checkIphoneAvailability)
-        } else {
-            debugLog(
-                "wired iPhone discovered vid=0x${device.vendorId.toString(16)} " +
-                    "pid=0x${device.productId.toString(16)}",
-            )
-            availabilityPollGeneration.incrementAndGet()
-            requestIphonePermission(device)
+        checkIphoneAvailability(Phase.IPHONE)
+    }
+
+    /** Sysfs descriptor reads belong on the existing USB worker, including re-enumeration polls. */
+    private fun checkIphoneAvailability(expectedPhase: Phase) {
+        if (closed || phase != expectedPhase) return
+        val generation = availabilityPollGeneration.get()
+        try {
+            executor.execute {
+                val discovered = runCatching { iphoneHost.discover().firstOrNull() }
+                mainHandler.post {
+                    if (closed || phase != expectedPhase || generation != availabilityPollGeneration.get()) return@post
+                    val summary = iphoneHost.discoverySummary()
+                    if (summary != lastUsbDiscoverySummary) {
+                        lastUsbDiscoverySummary = summary
+                        debugLog("wired USB discovery $summary")
+                    }
+                    val error = discovered.exceptionOrNull()
+                    if (error != null) {
+                        fail(error)
+                        return@post
+                    }
+                    val device = discovered.getOrNull()
+                    if (device == null) {
+                        onStatus(if (expectedPhase == Phase.REENUMERATION) CarPlayStatus.WaitingForReenumeration else CarPlayStatus.WaitingForIphone)
+                        scheduleAvailabilityPoll(expectedPhase) { checkIphoneAvailability(expectedPhase) }
+                    } else {
+                        debugLog(
+                            "wired iPhone discovered vid=0x${device.vendorId.toString(16)} " +
+                                "pid=0x${device.productId.toString(16)} source=" +
+                                if (iphoneHost.usesOemBridge(device)) "8600-oem-bridge" else "android-usb",
+                        )
+                        availabilityPollGeneration.incrementAndGet()
+                        requestIphonePermission(device)
+                    }
+                }
+            }
+        } catch (error: java.util.concurrent.RejectedExecutionException) {
+            if (!closed) fail(error)
         }
     }
 
@@ -1426,6 +1460,11 @@ class CarPlayController(
                     onStatus(CarPlayStatus.RequestingIphonePermission)
                     pollIphonePermission(device)
                 }
+                is IphoneUsbHost.PermissionRequest.OemBridgeRoute -> {
+                    debugLog("wired iPhone using 8600 OEM USB bridge; Android USB permission unchanged")
+                    permissionGrant.set(false)
+                    onIphonePermission(IphoneUsbHost.PermissionResult.Granted(request.device))
+                }
             }
         } catch (error: Throwable) {
             fail(error)
@@ -1437,21 +1476,29 @@ class CarPlayController(
             is IphoneUsbHost.PermissionResult.Granted -> {
                 // The system broadcast and the polling fallback can both observe the grant.
                 if (!permissionGrant.compareAndSet(false, true)) return
-                debugLog("wired iPhone USB permission granted")
+                debugLog("wired iPhone USB access ready source=" + if (iphoneHost.usesOemBridge(result.device)) "8600-oem-bridge" else "android-usb")
                 permissionPollGeneration++
                 when (phase) {
                     Phase.REENUMERATION, Phase.IPHONE -> {
                         // API 18 exposes the active USB layout only after opening a connection;
                         // inspect it off the main thread and keep the same re-enumeration policy.
+                        val inspectionPhase = phase
+                        val inspectionGeneration = availabilityPollGeneration.get()
                         executor.execute {
                             val configurationReady = try {
                                 iphoneHost.hasCarPlayConfiguration(result.device)
                             } catch (error: Exception) {
                                 debugLog("USB configuration inspection failed: ${error.message}")
+                                if (iphoneHost.usesOemBridge(result.device)) {
+                                    mainHandler.post {
+                                        if (!closed && phase == inspectionPhase && inspectionGeneration == availabilityPollGeneration.get()) fail(error)
+                                    }
+                                    return@execute
+                                }
                                 false
                             }
                             mainHandler.post {
-                                if (closed) return@post
+                                if (closed || phase != inspectionPhase || inspectionGeneration != availabilityPollGeneration.get()) return@post
                                 connectionDiagnostic(
                                     "USB configuration ready=$configurationReady " +
                                         "api=${android.os.Build.VERSION.SDK_INT} " +
@@ -1493,7 +1540,7 @@ class CarPlayController(
         val check = object : Runnable {
             override fun run() {
                 if (closed || generation != permissionPollGeneration) return
-                if (usbManager.hasPermission(device)) {
+                if (iphoneHost.hasAccess(device)) {
                     onIphonePermission(IphoneUsbHost.PermissionResult.Granted(device))
                     return
                 }
@@ -1518,11 +1565,20 @@ class CarPlayController(
         reenumerationAttempts += 1
         connectionDiagnostic("USB transition requested count=$reenumerationAttempts")
         onStatus(CarPlayStatus.SelectingConfiguration)
+        val generation = availabilityPollGeneration.get()
         iphoneHost.requestCarPlayReenumerationAsync(device, executor) { transition ->
-            when (transition) {
-                IphoneUsbHost.TransitionResult.ReenumerationRequested ->
-                    onStatus(CarPlayStatus.WaitingForReenumeration)
-                is IphoneUsbHost.TransitionResult.Failed -> fail(transition.error)
+            mainHandler.post {
+                if (closed || phase != Phase.REENUMERATION || generation != availabilityPollGeneration.get()) return@post
+                when (transition) {
+                    IphoneUsbHost.TransitionResult.ReenumerationRequested -> {
+                        onStatus(CarPlayStatus.WaitingForReenumeration)
+                        // A framework-filtered phone has no attach broadcast after mode switching.
+                        if (iphoneHost.supportsKernelDiscovery()) {
+                            scheduleAvailabilityPoll(Phase.REENUMERATION) { checkIphoneAvailability(Phase.REENUMERATION) }
+                        }
+                    }
+                    is IphoneUsbHost.TransitionResult.Failed -> fail(transition.error)
+                }
             }
         }
     }
@@ -1575,7 +1631,7 @@ class CarPlayController(
     }
 
     private fun openNcm(device: UsbDevice): NcmUsbBridge {
-        val connection = usbManager.openDevice(device)
+        val connection = iphoneHost.openConnection(device)
             ?: throw IphoneUsbException.DeviceUnavailable("Could not open the iPhone NCM connection")
         var bridgeOwnsConnection = false
         try {

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application android:label="@string/geely_usb_app_name" tools:replace="android:label">
+        <!-- Absent in ordinary builds: the code's explicit default is false. -->
+        <meta-data
+            android:name="com.shilapi.xcertplay.GEELY_USB_BYPASS"
+            android:value="true" />
+    </application>
+</manifest>

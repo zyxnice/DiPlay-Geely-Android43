@@ -43,6 +43,12 @@ android {
             applicationIdSuffix = ".repair1"
             versionNameSuffix = "-hud-test"
         }
+        create("geelyUsb") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".repair1.geely8600"
+            versionNameSuffix = "-H53-USB1"
+            matchingFallbacks += listOf("debug")
+        }
         release {
             optimization {
                 enable = false
@@ -108,4 +114,10 @@ tasks.register("assembleStandaloneDebug") {
     group = "build"
     description = "Build a standalone car-test APK with explicitly provisioned authentication."
     dependsOn(verifyStandaloneAuthentication, "assembleDebug")
+}
+
+tasks.register("assembleStandaloneGeelyUsb") {
+    group = "build"
+    description = "Build the isolated 8600 USB test APK with explicit standalone authentication."
+    dependsOn(verifyStandaloneAuthentication, "assembleGeelyUsb")
 }

@@ -4,6 +4,7 @@ import android.hardware.usb.*;
 import android.util.Log;
 import java.util.*;
 import com.shilapi.xcertplay.compat.LegacyUsbNative;
+import com.shilapi.xcertplay.compat.GeelyUsbDeviceAccess;
 
 /** API18 flattens every configuration into UsbDevice.interfaces, in descriptor order. */
 public final class H52UsbConfigurationFix {
@@ -50,7 +51,8 @@ public final class H52UsbConfigurationFix {
         if(connection.controlTransfer(128,8,0,0,current,1,2000)!=1) throw new IllegalStateException("Cannot confirm active Apple USB configuration");
         int active=u(current,0);
         if(active==target) return true;
-        int result=LegacyUsbNative.INSTANCE.configure(connection.getFileDescriptor(),target);
+        int result=GeelyUsbDeviceAccess.setConfigurationIfRecovered(device,connection,target)
+                ? 0 : LegacyUsbNative.INSTANCE.configure(connection.getFileDescriptor(),target);
         if(result==-16) {
             if(device.getVendorId()!=0x05ac || target<1 || target>255) throw new IllegalStateException("Refusing non-Apple configuration transition");
             try {

@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import com.shilapi.xcertplay.compat.UsbCompat
+import com.shilapi.xcertplay.compat.GeelyUsbDeviceAccess
 import java.io.Closeable
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -72,10 +73,13 @@ class IphoneUsbHost(
     private val permissionAction: String = "${context.packageName}.IPHONE_USB_PERMISSION",
 ) {
     private val appContext = context.applicationContext
+    private val deviceAccess = GeelyUsbDeviceAccess(appContext)
 
     sealed class PermissionRequest {
         data class AlreadyGranted(val device: UsbDevice) : PermissionRequest()
         data class Requested(val device: UsbDevice) : PermissionRequest()
+        /** OEM bridge availability is not an Android USB permission grant. */
+        data class OemBridgeRoute(val device: UsbDevice) : PermissionRequest()
     }
 
     sealed class PermissionResult {
@@ -96,7 +100,18 @@ class IphoneUsbHost(
     }
 
     fun discover(): List<UsbDevice> =
-        usbManager.deviceList.values.filter { matcher.matches(it.vendorId, it.productId) }
+        deviceAccess.discover(usbManager.deviceList.values.toList())
+            .filter { matcher.matches(it.vendorId, it.productId) }
+
+    fun supportsKernelDiscovery(): Boolean = GeelyUsbDeviceAccess.isEnabled(appContext)
+    fun usesOemBridge(device: UsbDevice): Boolean = deviceAccess.isRecovered(device)
+    fun hasAccess(device: UsbDevice): Boolean = deviceAccess.hasAccess(device)
+    fun discoverySummary(): String = deviceAccess.discoverySummary()
+
+    fun openConnection(device: UsbDevice): UsbDeviceConnection? {
+        requireConfiguredDevice(device)
+        return deviceAccess.open(device)
+    }
 
     /**
      * Checks the active CarPlay configuration on every supported API. Android 4.3 has no typed
@@ -104,8 +119,11 @@ class IphoneUsbHost(
      */
     fun hasCarPlayConfiguration(device: UsbDevice): Boolean {
         requireConfiguredDevice(device)
-        if (!usbManager.hasPermission(device)) return false
-        val connection = usbManager.openDevice(device) ?: return false
+        if (!hasAccess(device)) {
+            if (usesOemBridge(device)) throw IphoneUsbException.PermissionDenied("8600 OEM USB bridge unavailable")
+            return false
+        }
+        val connection = openConnection(device) ?: return false
         return try {
             val layout = IphoneCarPlayConfiguration.readLayout(device, connection)
             val available = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -120,6 +138,7 @@ class IphoneUsbHost(
             available
         } catch (error: RuntimeException) {
             Log.w(IphoneCarPlayConfiguration.TAG, "carplay configuration descriptor read failed", error)
+            if (usesOemBridge(device)) throw error
             false
         } finally {
             connection.close()
@@ -129,6 +148,10 @@ class IphoneUsbHost(
     @Throws(IphoneUsbException::class)
     fun requestPermission(device: UsbDevice): PermissionRequest {
         requireConfiguredDevice(device)
+        if (usesOemBridge(device)) {
+            if (!hasAccess(device)) throw IphoneUsbException.PermissionDenied("8600 OEM USB bridge unavailable")
+            return PermissionRequest.OemBridgeRoute(device)
+        }
         if (usbManager.hasPermission(device)) return PermissionRequest.AlreadyGranted(device)
 
         usbManager.requestPermission(device, permissionPendingIntent())
@@ -242,10 +265,10 @@ class IphoneUsbHost(
         operation: (UsbDeviceConnection) -> TransitionResult,
     ): TransitionResult = try {
         requireConfiguredDevice(device)
-        if (!usbManager.hasPermission(device)) {
+        if (!hasAccess(device)) {
             throw IphoneUsbException.PermissionDenied("USB permission has not been granted")
         }
-        val connection = usbManager.openDevice(device)
+        val connection = openConnection(device)
             ?: throw IphoneUsbException.DeviceUnavailable("UsbManager could not open the iPhone")
         try {
             operation(connection)
@@ -262,10 +285,10 @@ class IphoneUsbHost(
 
     private fun openIap2UsbSession(device: UsbDevice): Iap2UsbSession {
         requireConfiguredDevice(device)
-        if (!usbManager.hasPermission(device)) {
+        if (!hasAccess(device)) {
             throw IphoneUsbException.PermissionDenied("USB permission has not been granted")
         }
-        val connection = usbManager.openDevice(device)
+        val connection = openConnection(device)
             ?: throw IphoneUsbException.DeviceUnavailable("UsbManager could not open the iPhone")
         var claimedInterface: UsbInterface? = null
         try {
