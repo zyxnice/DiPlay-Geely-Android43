@@ -2,6 +2,10 @@
 
 面向博瑞 H52 / i.MX6 / API18 的 CarPlay 适配。**视频流畅度与触控优化、原厂免 root 桥接，以及音乐和导航声音修复，是这一轮迭代的主要成果。** 其他车型仍需独立验证。
 
+## 8600 车机排查接手（2026-10-27）
+
+请先阅读 [USB连接与卡顿排查总记录](docs/GEELY-8600-HANDOFF.md)。8600 已通过运行时配置连通 CarPlay，但音画卡顿仍未解决；与下面 H52/P21 的历史验收状态分开看待。
+
 ## 下载与测试状态
 
 | 版本 | 用途 | 状态 |
@@ -59,4 +63,3 @@ P16 阶段现场已确认 Freescale 硬解与 1920×720 正常画面；对话记
 ## 来源与许可
 
 基于 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) v0.2.10 的 API18 适配，选择性移植上游 0.2.13 的适用修复，不是直接运行官方现代系统 APK。保留 [GPL-3.0 LICENSE](LICENSE) 和 [第三方来源及许可](docs/THIRD_PARTY_NOTICES.md)。实验性认证资产沿用现有声明，APK 不是 Apple 认证产品；源码归档不提供独立认证或签名私钥。
-
