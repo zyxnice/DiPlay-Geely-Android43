@@ -5,6 +5,28 @@ import org.junit.Test
 import java.nio.file.Files
 
 class DiagnosticRedactorTest {
+    @Test fun geelyUsbDiscoveryDiagnosticsSurviveWithoutWeakeningCredentialFilters() {
+        val lines = listOf(
+            "wired discovery 8600KernelDiscovery=true api=18 board=C3ALFUS display=06.03.08600.H53.00060",
+            "wired discovery 8600KernelDiscovery=false api=18 board=C3ALFUS display=06.03.08600.H53.00060",
+            "wired USB discovery kernelDiscovery=disabled framework=0",
+            "wired USB discovery kernelDiscovery=enabled framework=0 sysfsApple=0 recovered=0 incomplete=0 reason=none",
+            "wired USB discovery kernelDiscovery=enabled framework=0 sysfsApple=1 recovered=0 incomplete=1 reason=IOException",
+            "wired USB discovery kernelDiscovery=enabled framework=0 sysfsApple=1 recovered=1 incomplete=0 reason=none",
+            "wired USB discovery kernelDiscovery=enabled framework=0 sysfsApple=0 recovered=0 incomplete=1 reason=sysfs-list-unavailable",
+        )
+        for (line in lines) {
+            val safe = DiagnosticRedactor.redact(line)
+            assertNotNull(line, safe)
+            // Numeric firmware versions may still be masked by the existing address filter.
+            if (line.startsWith("wired USB discovery")) assertEquals(line, safe)
+            else assertTrue(safe!!.contains("8600KernelDiscovery="))
+        }
+        for (field in listOf("pass", "password", "passphrase", "wifiPassword", "token", "payload")) {
+            assertNull(field, DiagnosticRedactor.redact("${lines.first()} $field=secret"))
+        }
+    }
+
     @Test fun boundedMicrophoneStartFailureAndCaptureCountersSurviveRedaction() {
         val lines = listOf(
             "Microphone: start type=telephony source=VOICE_COMMUNICATION codec=OPUS rate=48000 channels=1 frameMs=20 routedDeviceType=15",
