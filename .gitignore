@@ -41,3 +41,6 @@ release-signing.properties
 
 # Publish selected reproducible verification logs.
 !docs/geely-android43/validation/*.log
+
+# Private local vehicle diagnostics
+/usb-diagnostics/
