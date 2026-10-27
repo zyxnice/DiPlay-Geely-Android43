@@ -76,6 +76,8 @@ def geelyAndroidJar = new File(geelySdkDirectory, 'platforms/android-18/android.
 def compileGeelyUsbHelper = tasks.register('compileGeelyUsbHelper', JavaCompile) {
     source files(
         'src/main/java/com/shilapi/xcertplay/compat/GeelyUsbFdHelper.java',
+        'src/main/java/com/shilapi/xcertplay/compat/GeelyUsbRuntimeHelper.java',
+        'src/main/java/com/shilapi/xcertplay/compat/GeelyUsbRuntimePolicy.java',
         'src/main/java/com/shilapi/xcertplay/compat/GeelyUsbIdentity.java',
         'src/main/java/com/shilapi/xcertplay/compat/GeelyUsbDescriptorParser.java')
     classpath = files()

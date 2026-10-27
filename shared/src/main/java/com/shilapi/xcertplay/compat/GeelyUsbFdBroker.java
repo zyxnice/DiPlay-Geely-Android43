@@ -142,7 +142,7 @@ public final class GeelyUsbFdBroker {
         }
     }
 
-    private File prepareHelper() throws IOException {
+    File prepareHelper() throws IOException {
         synchronized (ASSET_LOCK) {
             File directory = new File(context.getFilesDir(), "geely-usb");
             if (!directory.isDirectory() && !directory.mkdir()) throw new IOException("helper_directory");

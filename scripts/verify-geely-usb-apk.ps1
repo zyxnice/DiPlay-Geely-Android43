@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory)][string] $ApkPath,
     [Parameter(Mandatory)][string] $AuthenticationAssetsDirectory,
     [Parameter(Mandatory)][string] $SdkDirectory,
-    [string] $BuildToolsVersion = '37.0.0'
+    [string] $BuildToolsVersion = '37.0.0',
+    [ValidateSet('USB1', 'USB2')][string] $ExpectedUsbVersion = 'USB1'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,7 +21,7 @@ $badging = $badgingLines -join "`n"
 if ($badging -notmatch "package: name='com\.shihab\.diplay\.repair1\.geely8600'") {
     throw 'Unexpected application ID; this test must coexist with the original application'
 }
-if ($badging -notmatch "versionName='[^']*H53-USB1'" -or
+if ($badging -notmatch "versionName='[^']*H53-$ExpectedUsbVersion'" -or
     $badging -notmatch "(?m)^(?:minSdkVersion|sdkVersion):'18'$" -or
     $badging -notmatch "native-code:.*'armeabi-v7a'") {
     throw 'APK version, API-18 minimum or ARMv7 support is incorrect'
@@ -41,6 +42,9 @@ if ($signature -notmatch 'certificate SHA-256 digest: [0-9a-fA-F]{64}') {
 $manifestLines = & (Join-Path $toolsDirectory 'aapt2.exe') dump xmltree $resolvedApk --file AndroidManifest.xml
 if ($LASTEXITCODE -ne 0) { throw 'Could not read packaged manifest' }
 $manifest = $manifestLines -join "`n"
+if ($ExpectedUsbVersion -eq 'USB2' -and $manifest -notmatch '(?s)GEELY_USB_RUNTIME_RECOVERY[^\n]*\n[^\n]*android:value[^\n]*(?:=true|0xffffffff)') {
+    throw 'USB2 runtime recovery metadata is missing'
+}
 if ($manifest -notmatch '(?s)GEELY_USB_BYPASS[^\n]*\n[^\n]*android:value[^\n]*(?:=true|0xffffffff)') {
     throw 'The isolated test metadata is not explicitly true'
 }

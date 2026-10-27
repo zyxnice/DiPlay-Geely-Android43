@@ -51,8 +51,21 @@ public final class H52UsbConfigurationFix {
         if(connection.controlTransfer(128,8,0,0,current,1,2000)!=1) throw new IllegalStateException("Cannot confirm active Apple USB configuration");
         int active=u(current,0);
         if(active==target) return true;
-        int result=GeelyUsbDeviceAccess.setConfigurationIfRecovered(device,connection,target)
-                ? 0 : LegacyUsbNative.INSTANCE.configure(connection.getFileDescriptor(),target);
+        boolean runtimeRecovery=GeelyUsbDeviceAccess.runtimeRecoveryEnabled(connection);
+        int result;
+        if(runtimeRecovery && device.getVendorId()==0x05ac && device.getProductId()==0x12a8 && active==2 && target==6) {
+            result=LegacyUsbNative.INSTANCE.configureGeely(connection.getFileDescriptor(),target);
+            Log.i("xcertplay-usb","8600 configuration recovery active="+active+" target="+target+" result="+result);
+        } else if(GeelyUsbDeviceAccess.setConfigurationIfRecovered(device,connection,target)) {
+            result=0;
+        } else {
+            result=LegacyUsbNative.INSTANCE.configure(connection.getFileDescriptor(),target);
+        }
+        if(runtimeRecovery && result!=0) {
+            Log.e("xcertplay-usb","8600 configuration recovery failed errno="+result+" active="+active+" target="+target);
+            throw new IllegalStateException("8600 USB配置切换失败 errno="+result
+                    +(result==-16 ? "；请关闭其他投屏应用后重试" : "；请保存连接日志"));
+        }
         if(result==-16) {
             if(device.getVendorId()!=0x05ac || target<1 || target>255) throw new IllegalStateException("Refusing non-Apple configuration transition");
             try {

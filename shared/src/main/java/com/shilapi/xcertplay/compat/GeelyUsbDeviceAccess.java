@@ -33,6 +33,8 @@ public final class GeelyUsbDeviceAccess {
     private static final File SYSFS = new File("/sys/bus/usb/devices");
     private static final Map<UsbDeviceConnection, ConnectionRecord> CONNECTIONS =
             Collections.synchronizedMap(new WeakHashMap<UsbDeviceConnection, ConnectionRecord>());
+    private static final Map<UsbDeviceConnection, Boolean> RUNTIME_CONNECTIONS =
+            Collections.synchronizedMap(new WeakHashMap<UsbDeviceConnection, Boolean>());
     private final Context context;
     private final UsbManager manager;
     private final GeelyUsbFdBroker broker;
@@ -136,7 +138,11 @@ public final class GeelyUsbDeviceAccess {
     public UsbDeviceConnection open(UsbDevice device) {
         RecoveredDevice candidate;
         synchronized (this) { candidate = recovered.get(device); }
-        if (candidate == null) return manager == null ? null : manager.openDevice(device);
+        if (candidate == null) {
+            UsbDeviceConnection normal = manager == null ? null : manager.openDevice(device);
+            registerRuntimeConnection(normal);
+            return normal;
+        }
         if (!isEnabled(context)) throw new IllegalStateException("8600 USB bypass guard no longer matches");
         UsbDeviceConnection connection = null;
         try (GeelyUsbFdBroker.OpenedDevice opened = broker.open(candidate.identity)) {
@@ -153,6 +159,7 @@ public final class GeelyUsbDeviceAccess {
             if (!Boolean.TRUE.equals(open.invoke(connection, candidate.identity.devicePath(), opened.descriptor)))
                 throw new IOException("UsbDeviceConnection rejected transferred USB descriptor");
             CONNECTIONS.put(connection, new ConnectionRecord(device, candidate.identity, parsed.rawDescriptors(), broker));
+            registerRuntimeConnection(connection);
             Log.i(TAG, "8600 USB connection opened through OEM FD bridge " + candidate.identity.devicePath());
             return connection; // Firmware native_open duplicates the FD; OpenedDevice closes the received FD.
         } catch (Exception failure) {
@@ -164,6 +171,15 @@ public final class GeelyUsbDeviceAccess {
             throw new IllegalStateException("8600 USB OEM FD connection failed: "
                     + (failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage()), failure);
         }
+    }
+
+    private void registerRuntimeConnection(UsbDeviceConnection connection) {
+        if (connection != null && GeelyUsbRuntimeRecovery.isEnabled(context)) RUNTIME_CONNECTIONS.put(connection, true);
+    }
+
+    /** Both framework and recovered connections carry the same exact-platform opt-in. */
+    public static boolean runtimeRecoveryEnabled(UsbDeviceConnection connection) {
+        return Boolean.TRUE.equals(RUNTIME_CONNECTIONS.get(connection));
     }
 
     /** Complete descriptor copy, independent of API18's native descriptor read size. */

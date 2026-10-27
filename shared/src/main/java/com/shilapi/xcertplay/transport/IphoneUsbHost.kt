@@ -74,6 +74,12 @@ class IphoneUsbHost(
 ) {
     private val appContext = context.applicationContext
     private val deviceAccess = GeelyUsbDeviceAccess(appContext)
+    private val runtimeRecovery = com.shilapi.xcertplay.compat.GeelyUsbRuntimeRecovery(appContext)
+
+    fun prepareWiredDiscovery(): Boolean = runtimeRecovery.prepare()
+    fun stopRuntimeRecovery() = runtimeRecovery.stop()
+    fun runtimeSummary(): String = runtimeRecovery.summary()
+    fun supportsRuntimeRecovery(): Boolean = com.shilapi.xcertplay.compat.GeelyUsbRuntimeRecovery.isEnabled(appContext)
 
     sealed class PermissionRequest {
         data class AlreadyGranted(val device: UsbDevice) : PermissionRequest()

@@ -45,3 +45,11 @@ The static site layout, CSS and generator adapt DiAuto (AGPL-3.0). The AGPL lice
 Required Notice: Copyright AndyShaman (https://github.com/AndyShaman/BYDMate)
 
 The maneuver PNGs under `shared/src/main/assets/byd-hud-icons` were imported from BYDMate. Its PolyForm Noncommercial 1.0.0 terms and required notice are included alongside the assets. These files are separate from the project code license; upstream describes them as donor assets and their original provenance is not independently established. The validated DiLink5.1 windshield path uses factory turn codes rather than these images.
+
+## USB2 bounded driver recovery
+
+The configuration recovery policy in `shared/src/main/jni/geely_usb_configuration.h` is adapted
+from `programmerguohuajing/DiPlay-Legacy-Android`, commit
+`90a9a09f62292aab6fffa0896f83749c70f47d9f`, `shared/src/main/jni/usb_host_compat.c`,
+under GPL-3.0. It is restricted here to the verified H53 device and snd-usb-audio interfaces,
+with preserved authorized-FD ownership and failure rebind behavior.

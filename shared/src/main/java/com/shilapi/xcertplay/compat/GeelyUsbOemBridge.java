@@ -25,6 +25,22 @@ final class GeelyUsbOemBridge {
     /** Caller runs on a daemon worker: OEM Binder may block until the helper's hard deadline. */
     void start(File helperDex, File runtimeDirectory, GeelyUsbFdHelper.Request request) throws IOException {
         String command = buildCommand(helperDex, runtimeDirectory, request);
+        execute(command);
+    }
+
+    String prepareRuntime(File helperDex, File runtimeDirectory, long deadline, File lease, String nonce) throws IOException {
+        if (!lease.getCanonicalFile().getParentFile().equals(helperDex.getCanonicalFile().getParentFile())
+                || !nonce.matches("[a-f0-9]{32}") || !lease.getName().equals("runtime-" + nonce + ".lease"))
+            throw new IOException("runtime_lease_path");
+        String result = execute(buildHelperCommand(helperDex, runtimeDirectory,
+                GeelyUsbRuntimeHelper.ENTRY_POINT, new String[] {Long.toString(deadline), lease.getCanonicalPath(), nonce}));
+        java.util.regex.Matcher ok = java.util.regex.Pattern.compile("GEELY_RUNTIME_OK:(ready|prepared|active-preserved)").matcher(result);
+        if (ok.find()) return ok.group(1);
+        java.util.regex.Matcher failure = java.util.regex.Pattern.compile("GEELY_RUNTIME_FAILED:([a-z_]{1,64})").matcher(result);
+        throw new IOException(failure.find() ? failure.group(1) : "runtime_no_verified_response");
+    }
+
+    private String execute(String command) throws IOException {
         Parcel input = Parcel.obtain();
         Parcel output = Parcel.obtain();
         try {
@@ -42,6 +58,7 @@ final class GeelyUsbOemBridge {
             }
             // A successful text transaction is not proof of successful root FD access.
             Log.d(TAG, "OEM helper invocation returned textBytes=" + (result == null ? -1 : result.length));
+            return result == null ? "" : new String(result, GeelyUsbFdHelper.UTF8);
         } catch (SecurityException denied) {
             throw new IOException("oem_bridge_denied", denied);
         } catch (Exception failure) {
@@ -60,7 +77,12 @@ final class GeelyUsbOemBridge {
     }
 
     static String buildCommand(File helperDex, File runtimeDirectory, GeelyUsbFdHelper.Request request) throws IOException {
-        if (helperDex == null || runtimeDirectory == null || request == null) throw new IOException("helper_arguments");
+        if (request == null) throw new IOException("helper_arguments");
+        return buildHelperCommand(helperDex, runtimeDirectory, GeelyUsbFdHelper.ENTRY_POINT, request.arguments());
+    }
+
+    private static String buildHelperCommand(File helperDex, File runtimeDirectory, String entryPoint, String[] arguments) throws IOException {
+        if (helperDex == null || runtimeDirectory == null) throw new IOException("helper_arguments");
         File dex = helperDex.getCanonicalFile();
         File runtime = runtimeDirectory.getCanonicalFile();
         if (!dex.getName().equals("helper.dex") || !runtime.getName().equals("runtime")
@@ -69,8 +91,8 @@ final class GeelyUsbOemBridge {
         StringBuilder command = new StringBuilder("ANDROID_DATA=");
         command.append(shellQuote(runtime.getPath()));
         command.append(" CLASSPATH=").append(shellQuote(dex.getPath()));
-        command.append(" /system/bin/app_process /system/bin ").append(GeelyUsbFdHelper.ENTRY_POINT);
-        for (String argument : request.arguments()) command.append(' ').append(shellQuote(argument));
+        command.append(" /system/bin/app_process /system/bin ").append(entryPoint);
+        for (String argument : arguments) command.append(' ').append(shellQuote(argument));
         command.append(" 2>/dev/null");
         if (command.toString().getBytes(GeelyUsbFdHelper.UTF8).length + 1 > 900) throw new IOException("oem_command_limit");
         return command.toString();

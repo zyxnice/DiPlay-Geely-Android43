@@ -4,6 +4,18 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <linux/usbdevice_fs.h>
+#include "geely_usb_configuration.h"
+
+// Separate opt-in entry: the existing configure() contract and other platforms are unchanged.
+JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_compat_LegacyUsbNative_configureGeely(JNIEnv *env, jobject self, jint fd, jint id) {
+    (void) env; (void) self;
+    if (fd < 0) return -EBADF;
+    int owned_fd = dup(fd);
+    if (owned_fd < 0) return -errno;
+    int result = geely_configure_fd(owned_fd, (unsigned int) id);
+    close(owned_fd);
+    return result;
+}
 
 // Operate only on an already-authorized UsbDeviceConnection fd; never open/close it.
 JNIEXPORT jint JNICALL Java_com_shilapi_xcertplay_compat_LegacyUsbNative_configure(JNIEnv *env, jobject self, jint fd, jint id) {

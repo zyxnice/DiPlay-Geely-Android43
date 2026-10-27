@@ -4,6 +4,9 @@
     <application android:label="@string/geely_usb_app_name" tools:replace="android:label">
         <!-- Absent in ordinary builds: the code's explicit default is false. -->
         <meta-data
+            android:name="com.shilapi.xcertplay.GEELY_USB_RUNTIME_RECOVERY"
+            android:value="true" />
+        <meta-data
             android:name="com.shilapi.xcertplay.GEELY_USB_BYPASS"
             android:value="true" />
     </application>

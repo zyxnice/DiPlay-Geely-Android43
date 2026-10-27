@@ -46,7 +46,7 @@ android {
         create("geelyUsb") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".repair1.geely8600"
-            versionNameSuffix = "-H53-USB1"
+            versionNameSuffix = "-H53-USB2"
             matchingFallbacks += listOf("debug")
         }
         release {

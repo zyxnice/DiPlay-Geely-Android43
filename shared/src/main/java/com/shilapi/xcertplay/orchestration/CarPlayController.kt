@@ -459,6 +459,7 @@ class CarPlayController(
         com.shilapi.xcertplay.glance.CarPlayGlance.setConnected(false)
         BydNavigationOutputs.clearClusterStreamControl(::applyClusterUi)
         closeReceivers()
+        iphoneHost.stopRuntimeRecovery()
         availabilityPollGeneration.incrementAndGet()
         wirelessGeneration.incrementAndGet()
         permissionPollGeneration += 1
@@ -1408,10 +1409,16 @@ class CarPlayController(
         val generation = availabilityPollGeneration.get()
         try {
             executor.execute {
-                val discovered = runCatching { iphoneHost.discover().firstOrNull() }
+                if (closed || phase != expectedPhase || generation != availabilityPollGeneration.get()) return@execute
+                val discovered = runCatching {
+                    // Only initial discovery owns role/charging preparation. Never reset during
+                    // Apple re-enumeration or after USBMUX/NCM has claimed the device.
+                    if (expectedPhase == Phase.IPHONE && !iphoneHost.prepareWiredDiscovery()) null
+                    else iphoneHost.discover().firstOrNull()
+                }
                 mainHandler.post {
                     if (closed || phase != expectedPhase || generation != availabilityPollGeneration.get()) return@post
-                    val summary = iphoneHost.discoverySummary()
+                    val summary = iphoneHost.discoverySummary() + " runtime=" + iphoneHost.runtimeSummary()
                     if (summary != lastUsbDiscoverySummary) {
                         lastUsbDiscoverySummary = summary
                         debugLog("wired USB discovery $summary")
@@ -1587,7 +1594,8 @@ class CarPlayController(
         when (phase) {
             Phase.REENUMERATION, Phase.IPHONE -> {
                 availabilityPollGeneration.incrementAndGet()
-                requestIphonePermission(device)
+                if (iphoneHost.supportsRuntimeRecovery()) checkIphoneAvailability(phase)
+                else requestIphonePermission(device)
             }
             else -> Unit
         }
