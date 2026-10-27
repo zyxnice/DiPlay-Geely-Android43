@@ -1,6 +1,6 @@
 # 8600 USB1 测试包
 
-本包用于验证 Android 4.3 的 8600 车机中，内核已枚举 iPhone、但 Android UsbManager 没有收录它时，能否通过原厂权限桥继续连接。未进行实车 CarPlay 验收，不能据此认定问题已修复。
+本包用于验证 Android 4.3 的 8600 车机中，内核已枚举 iPhone、但 Android UsbManager 没有收录它时，能否通过原厂权限桥继续连接。后续已通过运行时 USB 兼容处理完成实车连接，音画卡顿仍未解决；该处理尚未固化到 APK。详见 [接手记录](GEELY-8600-HANDOFF.md)。
 
 ## 安装与测试
 
@@ -14,8 +14,9 @@
 
 ## 日志判断
 
-- `wired discovery 8600Bypass=true`：测试旁路平台守卫已匹配。若为 false，查看同一行的 API、board、display；本包没有强制对其它平台启用。
-- `wired USB discovery ... framework=... sysfsApple=... recovered=... incomplete=...`：系统列表、sysfs 苹果设备、恢复对象和扫描失败的数量；只在结果变化时记录。
+- `wired discovery 8600KernelDiscovery=true`：测试旁路平台守卫已匹配。若为 false，查看同一行的 API、board、display；本包没有强制对其它平台启用。
+- `wired USB discovery kernelDiscovery=enabled framework=... sysfsApple=... recovered=... incomplete=...`：系统列表、sysfs 苹果设备、恢复对象和扫描失败的数量；只在结果变化时记录。`kernelDiscovery=disabled` 表示旁路未启用。
+- 旧版日志键 `8600Bypass` / `bypass` 会误触密码过滤，导致整行不显示也不写入报告；仅凭缺少这两行不能判断安装包版本或旁路是否启用。新版改用上述日志键，保留原敏感信息过滤规则。
 - `sysfsApple=0` 且 `incomplete=0`：这次扫描没读到苹果节点，应用旁路无法自行制造内核枚举。
 - `incomplete` 大于 0：扫描或描述符核验不完整；不能把它当作“手机一定没接上”。
 - `source=8600-oem-bridge`：本次使用恢复设备及原厂 FD 通道；不代表 Android 已授予普通 USB 权限。
