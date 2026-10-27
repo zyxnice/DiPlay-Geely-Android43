@@ -65,7 +65,7 @@ public final class GeelyUsbDeviceAccess {
         for (UsbDevice device : frameworkDevices) merged.put(device.getDeviceName(), device);
         if (!isEnabled(context)) {
             recovered.clear();
-            discoverySummary = "bypass=disabled framework=" + frameworkDevices.size();
+            discoverySummary = "kernelDiscovery=disabled framework=" + frameworkDevices.size();
             return new ArrayList<UsbDevice>(merged.values());
         }
         Map<UsbDevice, RecoveredDevice> next = new IdentityHashMap<UsbDevice, RecoveredDevice>();
@@ -96,7 +96,7 @@ public final class GeelyUsbDeviceAccess {
         }
         recovered.clear();
         recovered.putAll(next);
-        discoverySummary = "bypass=enabled framework=" + frameworkDevices.size() + " sysfsApple="
+        discoverySummary = "kernelDiscovery=enabled framework=" + frameworkDevices.size() + " sysfsApple="
                 + appleDevices + " recovered=" + next.size() + " incomplete=" + failures + " reason=" + failureCategory;
         return new ArrayList<UsbDevice>(merged.values());
     }
