@@ -24,8 +24,18 @@ public final class GeelyUsbRuntimePolicy {
             this.config = config; this.role = role; this.charging = charging;
             this.power = power; this.fault = fault; this.activeApple = activeApple;
         }
-        boolean powered() { return "on".equals(power) || "normal/on".equals(power); }
-        boolean ready() { return "0".equals(role) && powered() && "sdp".equals(charging) && "working fine".equals(fault); }
+        boolean powered() { return isPowered(power); }
+        boolean ready() { return "0".equals(role) && powered() && "sdp".equals(charging) && isHealthy(fault); }
+    }
+
+    // H53 sysfs readback is descriptive text, not necessarily the value accepted by writes.
+    // Keep exact matches: substring matching could accept a fault message containing "on".
+    static boolean isPowered(String value) {
+        return "on".equals(value) || "normal/on".equals(value) || "normal, power on".equals(value);
+    }
+
+    static boolean isHealthy(String value) {
+        return "working fine".equals(value) || "working fine.".equals(value);
     }
 
     static boolean matches(int sdk, String board, String display, boolean optedIn) {
@@ -46,7 +56,7 @@ public final class GeelyUsbRuntimePolicy {
                 port.awaitHost();
             }
             State host = port.read();
-            if (!"0".equals(host.role) || !"working fine".equals(host.fault)) throw new IOException("host_not_ready");
+            if (!"0".equals(host.role) || !isHealthy(host.fault)) throw new IOException("host_not_ready");
             if (!host.powered()) { changedPower = true; port.power("on"); }
             if (!"sdp".equals(host.charging)) { changedCharging = true; port.charging("sdp"); }
             if (!port.read().ready()) throw new IOException("runtime_readback");
@@ -81,6 +91,6 @@ public final class GeelyUsbRuntimePolicy {
             throw new IOException("unexpected_charging_mode");
         if (!state.powered() && !"off".equals(state.power) && !"normal/off".equals(state.power))
             throw new IOException("unexpected_power_state");
-        if (!"working fine".equals(state.fault)) throw new IOException("otg_power_fault");
+        if (!isHealthy(state.fault)) throw new IOException("otg_power_fault");
     }
 }

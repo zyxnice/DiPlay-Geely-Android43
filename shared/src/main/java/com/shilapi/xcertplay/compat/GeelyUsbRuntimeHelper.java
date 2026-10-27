@@ -128,7 +128,7 @@ public final class GeelyUsbRuntimeHelper implements GeelyUsbRuntimePolicy.Port {
     private void write(String path, String value) throws Exception {
         checkDeadline();
         // Never energize a port with a current fault, including between two preparation steps.
-        if ("on".equals(value) && !"working fine".equals(text(OTG + "pin_fault/status"))) throw new IOException("otg_power_fault");
+        if ("on".equals(value) && !GeelyUsbRuntimePolicy.isHealthy(text(OTG + "pin_fault/status"))) throw new IOException("otg_power_fault");
         FileOutputStream output = new FileOutputStream(path);
         try { output.write(value.getBytes("US-ASCII")); output.flush(); }
         finally { output.close(); }

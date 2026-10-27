@@ -7,6 +7,25 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public final class GeelyUsbRuntimePolicyTest {
+    @Test public void actualH53SysfsTextPreparesAndThenStaysReady() throws Exception {
+        Fake port = new Fake();
+        port.power = "normal, power on"; port.fault = "working fine."; port.charge = "cdp";
+        assertEquals("prepared", GeelyUsbRuntimePolicy.prepare(port));
+        assertEquals("[config:accessory,ncm, host, charge:sdp]", port.calls.toString());
+        port.calls.clear();
+        assertEquals("ready", GeelyUsbRuntimePolicy.prepare(port));
+        assertTrue(port.calls.isEmpty());
+    }
+
+    @Test public void descriptiveFaultsAreNotAcceptedBySubstring() throws Exception {
+        assertFalse(GeelyUsbRuntimePolicy.isPowered("abnormal, power on"));
+        assertFalse(GeelyUsbRuntimePolicy.isHealthy("not working fine."));
+        Fake port = new Fake(); port.power = "normal, power on"; port.fault = "overcurrent";
+        try { GeelyUsbRuntimePolicy.prepare(port); fail("fault accepted"); }
+        catch (IOException expected) { assertEquals("otg_power_fault", expected.getMessage()); }
+        assertTrue(port.calls.isEmpty());
+    }
+
     @Test public void coldBootRestoresHostPowerAndSdpWithoutPersistence() throws Exception {
         Fake port = new Fake();
         assertEquals("prepared", GeelyUsbRuntimePolicy.prepare(port));

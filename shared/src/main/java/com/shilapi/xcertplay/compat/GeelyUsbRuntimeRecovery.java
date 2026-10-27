@@ -104,9 +104,8 @@ public final class GeelyUsbRuntimeRecovery {
         try {
             return "0".equals(GeelyUsbRuntimeHelper.text("/proc/driver/usbroleswitch/0/mode"))
                     && "sdp".equals(GeelyUsbRuntimeHelper.text("/sys/class/otg_peripheral/charging_mode"))
-                    && ("on".equals(GeelyUsbRuntimeHelper.text("/sys/class/otg_peripheral/power"))
-                        || "normal/on".equals(GeelyUsbRuntimeHelper.text("/sys/class/otg_peripheral/power")))
-                    && "working fine".equals(GeelyUsbRuntimeHelper.text("/sys/class/otg_peripheral/pin_fault/status"));
+                    && GeelyUsbRuntimePolicy.isPowered(GeelyUsbRuntimeHelper.text("/sys/class/otg_peripheral/power"))
+                    && GeelyUsbRuntimePolicy.isHealthy(GeelyUsbRuntimeHelper.text("/sys/class/otg_peripheral/pin_fault/status"));
         } catch (IOException unavailable) { return false; }
     }
 }
