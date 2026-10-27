@@ -1390,7 +1390,7 @@ class CarPlayController(
         reenumerationAttempts = 0
         lastUsbDiscoverySummary = null
         debugLog(
-            "wired discovery 8600Bypass=${iphoneHost.supportsKernelDiscovery()} " +
+            "wired discovery 8600KernelDiscovery=${iphoneHost.supportsKernelDiscovery()} " +
                 "api=${android.os.Build.VERSION.SDK_INT} board=${android.os.Build.BOARD} " +
                 "display=${android.os.Build.DISPLAY}",
         )
