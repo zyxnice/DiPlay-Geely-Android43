@@ -1,15 +1,17 @@
 # P21 · H52 音乐与导航声音修复（2026-10-08）
 
+> 历史归档：本项目目前仅服务吉利星越 2019 款 8600。2026-10-29 已从当前公开源码树移除旧 H52/P21 APK，保留本文、源码快照及历史校验值供追溯，不改写既有 Git 历史。以下 H52 实车结果不适用于星越 8600。
+
 **补充复核：P21 的音频、画面和触摸已实车通过，但重建 classes2 时误用过时树，遗漏部分最终 P16 的流畅度与 USB 免 root 调用。源码 ZIP 与实际 APK 的 USB 路径不一致。P22 本地候选已重新整合，尚未测试，暂不发布。**
 
 [正式 P21 Release（含 APK、源码 ZIP、校验文件）](https://github.com/xikai6282/DiPlay-Geely-Android43/releases/tag/h52-p21-20261008) · [完整逐项版本记录](../../VERSION-HISTORY.md)
 
 
-本目录保存实际安装并验证的 P21。只在一台博瑞 H52 / i.MX6 / Android 4.3 API18 实车测试，E01尚未验证。
+本目录保留 P21 的历史说明和源码快照。原 P21 安装包只在一台博瑞 H52 / i.MX6 / Android 4.3 API18 实车测试，E01尚未验证。
 
-## 下载
+## 历史产物与源码
 
-- [P21 测试 APK](DiPlay-H52-P21-OpusSoftwareHudGate-test.apk)
+- P21 测试 APK（`DiPlay-H52-P21-OpusSoftwareHudGate-test.apk`）已从当前公开源码树移除，不提供本地下载链接；上方原来源 Release 链接仅用于追溯，不是星越 8600 的推荐下载。
 - [P21 完整源码快照](DiPlay-H52-P21-source.zip)
 
 APK SHA-256：`d15a8655b0225579e018d578619fbff23d2a4d5da0de6b2e971b768fec66437f`
