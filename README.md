@@ -43,6 +43,7 @@
 
 ## 开发与技术记录
 
+- [USB 问题与验收清单](docs/GEELY-8600-USB-ACCEPTANCE-CHECKLIST.md)：后续 USB 优化与验证的统一入口，包含待解决问题、暂定标准、验证顺序和结果表。
 - [构建说明](docs/BUILD.md)：源码构建、8600 车测变体和打包边界。
 - [8600 USB 排查总记录](docs/GEELY-8600-HANDOFF.md)：2026-10-27 的现场记录，按日期理解结论。
 - [8600 USB2 适配记录](docs/GEELY-8600-USB2.md)：USB 自动准备过程与验证边界。
