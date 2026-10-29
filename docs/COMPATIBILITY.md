@@ -1,30 +1,24 @@
-# Compatibility
+# 吉利星越 2019 款 8600 兼容范围
 
-This public preview is an independent receiver, not an Apple-certified CarPlay accessory. The experimental bundled accessory identity is extractable and its future acceptance is not guaranteed.
+本项目已脱离原上游独立维护，仅支持吉利星越 2019 款、8600 版本原厂车机。以下区分支持范围与已验证事实，不以相同 Android 版本推断其他车机兼容。
 
-| Area | Current scope |
+| 项目 | 范围与状态 |
 | --- | --- |
-| Head unit | Android 9+ APK; wireless Wi-Fi Direct path needs Android 10+ |
-| Phone | Standard, non-jailbroken iPhone with CarPlay enabled; device/iOS compatibility varies |
-| Physical evidence | Previous private builds: wired and wireless picture, touch and audio confirmed on the development car with iPhone XS / iOS 18.7.10 |
-| Other cars | Mixed community reports across DiLink generations; not a certified model support list |
-| Current release | DiLink5.1: HUD/street names and Car hotspot confirmed; Wi-Fi Direct improved, occasional audio cutouts remain |
-| Wi-Fi | Prefer 5 GHz without an established station connection; align to a supported existing station channel; explicit 2.4 GHz fallback for firmware that rejects 5 GHz or automatic channel selection |
-| Video | Default H.264 / 30 fps; 60 fps and HEVC increase device-specific demands |
+| 车型 | 吉利星越 2019 款 |
+| 车机 | 8600；已记录 GEELY NL5QJ / C3ALFUS |
+| 固件 | 已记录 `06.03.08600.H53.00060`；其他固件未据此完成验收 |
+| 系统 | Android 4.3 / API18 |
+| 手机 | 具备 CarPlay 的 iPhone；具体机型和 iOS 组合需独立验证 |
+| USB | 已有实车连接、画面、触控和声音可用的反馈；不等同于长时间稳定性验收 |
+| 音视频 | 音乐改善有反馈；画面连续性与整体流畅度仍在排查 |
+| 无线、5GHz | 不作已通过承诺；芯片支持 5GHz 不等于 CarPlay 或 P2P 已在该频段通过 |
+| 方向盘按键、免 root 全场景 | 未完成全面验证 |
+| 其他车型 | 博瑞 H52、BYD、其他吉利车型及其他年份/车机不在支持范围 |
 
-## BYD HUD and car hotspot
+## 验证边界
 
-See [BYD navigation](BYD_NAVIGATION.md) for the exact verified firmware and lifecycle limits. Car hotspot now starts CarPlay on the development car using scoped IPv6. The phone must join the configured car hotspot. Neither result guarantees support on every firmware.
+本项目不是 Apple 或吉利官方产品，未获得 Apple CarPlay 认证。实验性认证身份的当前可用性不保证未来 iOS 仍接受。
 
-## Known limitations
+USB 需正确的数据端口、数据线与设备角色。不能用充电、手机识别、认证提供方就绪、单次出画面等单一现象替代完整会话验收。通话、Siri、冷启动、拔插重连、长时间运行及不同 iOS 版本需分别记录结果。
 
-- Some units stutter, particularly under higher video load. A 2.4 GHz link alone does not prove the cause: interference, firmware and decoder stalls can all contribute. Try Default icons, 30 fps and a lower resolution, then attach a report.
-- Some iOS/head-unit combinations do not visibly apply icon and text size. Reconnection is implemented; that does not guarantee the iPhone chooses the requested layout.
-- A radio that supports joining a 5 GHz network may still reject a 5 GHz Wi-Fi Direct group. The capability flag is diagnostic, not proof of group-owner support.
-- Automatic startup depends on the car's firmware and startup permissions.
-- USB requires a data port and correct host/device-role behavior.
-- Calls, Siri, background reconnection, long journeys and future iOS releases need broader testing.
-
-Reports record requested and actual frequencies, station association state, fallback failures and remembered-configuration events. Wi-Fi credentials and protocol payloads are excluded. A successful hotspot is not itself a successful CarPlay session.
-
-Android references: [SupplicantState](https://developer.android.com/reference/android/net/wifi/SupplicantState), [explicit P2P operating frequency](https://developer.android.com/reference/android/net/wifi/p2p/WifiP2pConfig.Builder#setGroupOperatingFrequency(int)).
+旧 H52/P21/P22、上游 BYD/DiLink、Android 9+/10+ 功能和验收记录均属于历史来源，不构成本车支持清单。安装与反馈见[安装说明](INSTALL.md)，当前项目状态见[首页](../README.md)。

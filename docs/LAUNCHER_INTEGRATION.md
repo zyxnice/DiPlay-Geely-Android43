@@ -1,5 +1,7 @@
 # CarPlay on your launcher's home screen
 
+> 继承资料：以下保留原上游功能与验证语境，不是星越 2019 款 8600 的功能承诺、安装步骤或验收结果。当前项目已独立维护，仅服务该车型与车机；请以[项目首页](../README.md)、[安装说明](INSTALL.md)和[兼容范围](COMPATIBILITY.md)为准。
+
 DiPlay can put CarPlay information on a launcher's home screen in three ways:
 
 | | What it shows | Works with | Needs |

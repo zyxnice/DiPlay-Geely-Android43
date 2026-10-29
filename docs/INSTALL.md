@@ -1,40 +1,33 @@
-# Install and connect
+# 吉利星越 2019 款 8600 车机安装与连接
 
-1. Park the car. Download `DiPlay-0.2.10.apk` from the official GitHub release linked on the website.
-2. Install on the Android head unit using its supported APK installation method. Do not install on the iPhone. Update over an existing DiPlay beta to retain settings and pairing records; the signing key is unchanged.
-3. Open DiPlay. Grant the permissions requested for the features you use: Bluetooth/Nearby devices, Wi-Fi/Location on older Android, and microphone for Siri/calls. Allow notifications for connection controls.
-4. Close other phone-projection apps before connecting.
+仅适用于本项目目标车型和车机。已记录环境为 GEELY NL5QJ / C3ALFUS、Android 4.3 / API18、固件 `06.03.08600.H53.00060`；其他固件需独立验证。
 
-## Wireless
+## 安装前
 
-Built-in car hotspot is the default. Open **Settings → Connection setup → Built-in car hotspot**, turn on the car hotspot at 5 GHz if available, and save its exact name and password. Keep Bluetooth and Wi-Fi enabled on the iPhone, pair it with the car, then tap **Connect phone**. The phone joins automatically after the Bluetooth handshake; manual Wi-Fi joining and ADB are not required. **Choose iPhone** changes the selected paired device. See [the setup guide](CONNECTION_SETUP.md).
+1. 核对车型年份、8600 版本及完整固件号，停车后操作。
+2. 从[本仓库 Releases](https://github.com/zyxnice/Geely-8600-Android43-CarPlay/releases)选择明确标注星越 8600 的包，阅读版本说明、校验值与回退方法。没有匹配包时不要用原上游、H52/P21/P22 或通用 APK 替代。
+3. 保留当前可用 APK、应用设置和所需诊断记录。只有包名及签名一致的版本才能覆盖安装；不要为了绕过签名冲突直接卸载。
+4. 本项目 8600 车测变体包名为 `com.shihab.diplay.repair1.geely8600`。源码普通 debug 包不等同于可独立连接手机的车测包，见[构建说明](BUILD.md)。
 
-Wi-Fi Direct remains an alternative on Android 10+. The Local hotspot option has been removed; existing selections migrate to built-in hotspot. USB remains available.
+## USB 连接
 
-## USB
+1. 将适用 APK 安装到车机，关闭其他占用手机投屏或 USB 会话的应用。
+2. 按应用实际提示授予所需权限，使用支持数据传输的线缆连接车机与已解锁 iPhone。
+3. 选择应用中的 USB 连接入口，按实际出现的提示确认 USB 访问、信任或 CarPlay 授权。
+4. 充电不代表数据链路建立。不能连接时记录提示、时间与固件号，按[8600 排查记录](GEELY-8600-HANDOFF.md)定位。记录中的驱动解绑、USB 模式切换等属于特定现场维护步骤，不是所有车辆的安装必做项。
 
-Connect the iPhone to a USB **data** port with a data-capable cable and choose **Connect with USB**. Approve USB access, Trust/CarPlay and the local VPN permission if requested. The local VPN carries the USB network link; it is not an internet VPN service. Charge-only ports/cables cannot work.
+## 验证与回退
 
-## Settings
+- 分别检查画面、触控、音乐、导航声音、断线重连与冷启动恢复；单次连接成功不等于全部通过。
+- 当前仍在排查画面连续性与整体流畅度，不承诺已达到稳定正式使用状态。
+- 出现异常时停止测试，按该版本说明恢复先前可用包；覆盖安装仍需相同包名和签名。不要未经核对修改系统 USB 属性或刷写固件。
 
-Swipe down with three fingers in CarPlay to open DiPlay settings, or return to the home screen. Icon/text size, resolution and frame rate use **Apply and reconnect** during an active session. A selection alone does not apply; Cancel preserves the old setting. When disconnected, **Save** applies to the next connection. Other settings also apply on the next connection.
+## 无线与其他功能
 
-Start with 30 fps, Efficient video (HEVC) off and Default icon/text size. Try 80% or 60% resolution for a slower head unit. Some iPhone/head-unit combinations still ignore icon/text scaling.
+当前项目重点为 USB。无线、5GHz、方向盘按键及免 root 全场景尚不能作为已验证能力；上游 Android 10+ Wi-Fi Direct、BYD 导航/电池等说明不属于本车型使用步骤。
 
-## Connection recovery and reports
+## 报告问题
 
-If reinstalling left an old group, close other projection apps, then use **Settings → Wireless connection help → Reset CarPlay Wi-Fi**. DiPlay asks before removing an unrecognized Wi-Fi Direct group. Updating in place is preferable to uninstalling.
+通过[本仓库 Issues](https://github.com/zyxnice/Geely-8600-Android43-CarPlay/issues)提交车型年份、车机型号、完整固件号、APK 版本/文件名、iPhone 与 iOS 版本、连接方式、复现步骤、预期与实际结果。如有诊断报告或录像，请检查后附上；若导出失败，说明失败位置，不按新版 Android 的目录推断 API18 的文件位置。
 
-Use **Settings → Diagnostics → Save diagnostic report** after reproducing a problem. Android 10+ saves to **Downloads/DiPlay**; Android 9 uses a document picker. Review the file, then attach it to a GitHub issue with car model, DiLink/Android versions, iPhone/iOS, transport and reproduction steps. Nothing is uploaded automatically.
-
-APK installation restrictions are controlled by your car's firmware. ADB is optional if your car supports it, not an app runtime requirement:
-
-```sh
-adb install -r DiPlay-0.2.10.apk
-```
-
-Only use a trusted computer. A different signing certificate cannot update this build; do not uninstall until you have saved any reports you need.
-
-## BYD navigation
-
-See [BYD navigation displays](BYD_NAVIGATION.md) for the firmware scope, map metadata requirements, settings and cleanup behavior. No runtime ADB starter is required.
+仅提交与本车机适配有关的必要信息，勿在公开反馈中上传凭据、配对记录或私钥。

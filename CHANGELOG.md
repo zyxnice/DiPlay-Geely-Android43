@@ -1,4 +1,8 @@
-# DiPlay 0.2.10 — 2026-10-03
+# 上游历史变更记录
+
+本文件保留继承来源的历史发布内容，不是当前星越 2019 款 8600 项目的发布或验收清单。文中的 BYD、Android 最低版本和 Issue 编号属于原上游语境。当前支持范围与状态见 [README](README.md)，本项目版本以[本仓库 Releases](https://github.com/zyxnice/Geely-8600-Android43-CarPlay/releases)为准。
+
+## DiPlay 0.2.10 — 2026-10-03
 
 - Publish CarPlay song metadata, position and artwork to Android media sessions; bound artwork queues and reject stale work across sessions (#82).
 - Preserve normal USBMUX frames while handling narrowly validated handshake padding (#114); let USB connect without saved wireless-hotspot credentials (#130).

@@ -1,7 +1,14 @@
-# Test checklist
+# 吉利星越 2019 款 8600 车测清单
 
-Use the [installation guide](INSTALL.md). With the car parked, verify wired and wireless connection, picture, touch and music. Test disconnect/reconnect, then settings Apply/Cancel. Save a diagnostic report after reproducing an issue.
+仅对本项目目标车型与车机执行，停车后按[安装说明](INSTALL.md)准备。以下是待逐项记录的检查清单，不代表这些项目已经通过。
 
-For channel memory, connect until authenticated CarPlay renders, disconnect and reconnect without changing the car's Wi-Fi association. Look for `remembered saved` followed by `remembered first`. Report absent events; creating a hotspot alone is insufficient.
+1. 记录车型年份、车机型号、完整固件号、APK 文件名/校验值、应用包名/版本、iPhone/iOS 及连接方式。
+2. 验证 USB 授权与连接，分别记录画面、触控、音乐和导航声音。
+3. 在相同显示设置与场景下观察画面连续性、触控响应和声音中断，不以解码提交统计当作物理屏幕 FPS。
+4. 分别验证拔插重连、退出后重开和冷启动恢复；保存异常发生时间与复现步骤。
+5. 通话、Siri、长时间播放以及无线等项目单独记录“通过/失败/未测”，不能由 USB 单次连接结果推定。
+6. 保留前一可用包与回退说明；遇到异常按对应版本说明处理，不盲目改变固件或系统 USB 配置。
 
-Include head-unit model, DiLink/Android, iPhone/iOS, wired/wireless, app version and exact steps. Do not post credentials or unreviewed personal information. See [compatibility](COMPATIBILITY.md) for remaining limitations.
+诊断报告和录像请先检查，再通过[本仓库 Issues](https://github.com/zyxnice/Geely-8600-Android43-CarPlay/issues)反馈。勿上传凭据、配对记录或私钥。[兼容范围](COMPATIBILITY.md)区分当前目标与未验证项。
+
+本地构建与单元测试见[构建说明](BUILD.md)；离线检查不能替代 API18 实车验收。

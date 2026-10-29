@@ -1,5 +1,7 @@
 # DiPlay 0.2.10 Android 4.3 (API 18) migration review
 
+> 历史迁移审查：本文件保留 API18 迁移时的实现与验证语境，包名、构建变体和验收状态可能与当前源码不同。当前项目仅服务吉利星越 2019 款 8600，现行说明见 [README](README.md) 与[构建文档](docs/BUILD.md)。
+
 ## Scope and identity
 
 This work starts from the user's `DiPlay-0.2.10-source.zip`, not the older 0.2.9 checkout. The application release identity in `mobile/build.gradle.kts` remains `applicationId = com.shihab.diplay`, `versionCode = 29`, `versionName = 0.2.10`, with `minSdk = 18`. The debug variant intentionally adds `.hudtest` and `-hud-test`; a debug install therefore displays a test suffix while retaining code 29. Multidex remains enabled because Android 4.3 does not provide native multidex.

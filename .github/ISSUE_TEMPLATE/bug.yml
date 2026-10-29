@@ -1,36 +1,41 @@
-name: Connection, display or audio problem
-description: Help us reproduce an issue on your head unit.
-title: '[Bug] '
+name: 星越 2019 款 8600 车机问题
+description: 反馈本车型的连接、画面、触控或声音问题。
+title: '[8600] '
 body:
   - type: markdown
     attributes:
-      value: 'Test while parked. Reports are public: review diagnostic files and remove personal information before attaching them. Never post credentials.'
+      value: '仅受理吉利星越 2019 款、8600 车机的问题。请停车后复现。反馈公开可见，附件勿包含凭据、配对记录或私钥。'
   - type: input
     id: version
-    attributes: {label: DiPlay version, placeholder: '0.1.0'}
+    attributes:
+      label: 应用版本与 APK 文件名
+      placeholder: '填写完整版本和文件名；如为自行构建，请提供提交号'
     validations: {required: true}
   - type: input
     id: car
-    attributes: {label: Car and head-unit model, placeholder: 'Car model/year, DiLink version, Android version'}
+    attributes:
+      label: 车型年份、车机型号与完整固件号
+      placeholder: '吉利星越 2019 款 / 8600 / 06.03.08600.H53.00060（请填写实际值）'
     validations: {required: true}
   - type: input
     id: phone
-    attributes: {label: iPhone model and exact iOS version}
+    attributes: {label: iPhone 型号与完整 iOS 版本}
     validations: {required: true}
   - type: dropdown
     id: transport
     attributes:
-      label: Connection
-      options: [Wireless, USB, Both]
+      label: 连接方式
+      options: [USB, 无线, USB 和无线]
+      description: '当前重点为 USB；提供无线选项用于描述现场情况，不代表无线已完成验收。'
     validations: {required: true}
   - type: textarea
     id: reproduce
     attributes:
-      label: What happened and how to reproduce it
-      description: 'Include expected behavior, steps, display settings and whether the car is also connected to a Wi-Fi network. For wireless, include the band/channel if the report shows it.'
+      label: 复现步骤、预期与实际结果
+      description: '请说明发生时间、显示设置、是否稳定复现，以及画面、触控、音乐、导航声音、重连分别有什么表现。'
     validations: {required: true}
   - type: textarea
     id: diagnostics
     attributes:
-      label: Diagnostic report or recording
-      description: 'Settings → Save diagnostic report; Android 10+ saves to Downloads/DiPlay. Attach the reviewed file here. If export fails, describe exactly when.'
+      label: 诊断报告或录像
+      description: '如能导出诊断报告，请检查后附上；不能导出时说明失败位置。勿上传凭据和配对记录。'

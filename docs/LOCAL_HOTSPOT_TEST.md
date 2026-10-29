@@ -1,5 +1,7 @@
 > Historical engineering notes: Local hotspot is no longer offered in the app. Saved local-hotspot selections migrate to built-in car hotspot; the internal transport code remains for compatibility. Use [Connection setup](CONNECTION_SETUP.md) for current instructions.
 
+> 继承资料：以下保留原上游功能与验证语境，不是星越 2019 款 8600 的功能承诺、安装步骤或验收结果。当前项目已独立维护，仅服务该车型与车机；请以[项目首页](../README.md)、[安装说明](INSTALL.md)和[兼容范围](COMPATIBILITY.md)为准。
+
 # Standalone 5 GHz local hotspot
 
 This transport is optional; existing Wi-Fi Direct and car-hotspot choices keep their settings. The app requests and releases its own Android LocalOnlyHotspot reservation. The car does not need an internet subscription. The phone still needs mobile data or downloaded maps for navigation data. No ADB, root, Shizuku or separate helper is needed at runtime.

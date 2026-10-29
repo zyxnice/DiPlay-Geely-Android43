@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Installation and connection help
-    url: https://github.com/shihabal3amri/DiPlay/blob/main/docs/INSTALL.md
-    about: Read setup and troubleshooting steps first.
+  - name: 星越 2019 款 8600 安装与连接说明
+    url: https://github.com/zyxnice/Geely-8600-Android43-CarPlay/blob/main/docs/INSTALL.md
+    about: 请先核对车型、车机与完整固件号，再按说明反馈。

@@ -1,5 +1,7 @@
 # DiPlay 0.2.10 — 2026-10-03
 
+> 继承资料：以下保留原上游功能与验证语境，不是星越 2019 款 8600 的功能承诺、安装步骤或验收结果。当前项目已独立维护，仅服务该车型与车机；请以[项目首页](../README.md)、[安装说明](INSTALL.md)和[兼容范围](COMPATIBILITY.md)为准。
+
 - Final combined source workflow: 528 unit tests passed (384 shared, 140 common, 4 Home), zero failures/errors. One additional wildcard-bind test skips explicitly on macOS when its socket reuse semantics prevent the intended conflict; the ordinary port-conflict and socket-cleanup tests pass.
 - Mobile, Home and map-host debug lint and all three source-only debug APK builds passed. Release lint and the production-signed mobile release build passed. Lint warnings remain (18 mobile debug, 5 Home, 2 map-host; 4 mobile release).
 - All ten corrected PR heads passed GitHub Android checks before merging. Tests cover remote-video URL/redirect rejection, bounded artwork queues and stale sessions, USB padding/fragment/coalescing controls, available-port fallback and socket ownership, call effect/mode lifecycle, and bounded privacy-safe diagnostic persistence under blocked writes and callback failures.

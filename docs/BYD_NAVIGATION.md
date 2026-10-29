@@ -1,5 +1,7 @@
 # BYD navigation displays
 
+> 继承资料：以下保留原上游功能与验证语境，不是星越 2019 款 8600 的功能承诺、安装步骤或验收结果。当前项目已独立维护，仅服务该车型与车机；请以[项目首页](../README.md)、[安装说明](INSTALL.md)和[兼容范围](COMPATIBILITY.md)为准。
+
 Phone navigation arrows, next-turn distance and street names can appear on supported BYD displays. Ordinary operation requires no ADB, root, laptop or helper process. The map app must provide structured navigation metadata; compatibility is not guaranteed for every map app or version.
 
 ## Validated windshield path
