@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Preserve the common build's CH341 authentication-device association. -->
+    <usb-device vendor-id="6790" product-id="21778" />
+    <!-- Match IphoneUsbMatcher.appleVendor(): Android can reuse the user's saved default
+         only if this activity also matches the re-enumerated iPhone at USB attach time.
+         This does not grant permission; the system owns first consent and default selection. -->
+    <usb-device vendor-id="1452" />
+</resources>

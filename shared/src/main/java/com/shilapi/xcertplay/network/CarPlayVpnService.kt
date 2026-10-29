@@ -58,6 +58,7 @@ class CarPlayVpnService : VpnService() {
     private var bridge: Ipv6NcmBridge? = null
     private var tun: ParcelFileDescriptor? = null
     private var attachGeneration = 0
+    private var firstTcpAccepted = false
 
     override fun onBind(intent: Intent?): IBinder = binder
 
@@ -157,6 +158,31 @@ class CarPlayVpnService : VpnService() {
     /** Port the AirPlay listener actually bound, which may differ from the configured port. */
     fun boundPort(): Int? = attachment?.config?.port
 
+    /** Identifies this attachment, so a delayed control worker cannot affect a replacement. */
+    @Synchronized
+    fun startupGeneration(): Int = attachGeneration
+
+    /** Null means this attachment ended/replaced; true remains latched after a TCP session ends. */
+    @Synchronized
+    fun hasAcceptedConnection(generation: Int): Boolean? =
+        if (!active.get() || generation != attachGeneration) null else firstTcpAccepted
+
+    /**
+     * Atomically ends only this still-pending attachment. acceptLoop uses the same monitor, so an
+     * accepted TCP wins over startup expiry. A stale controller cannot detach a replacement.
+     * Notify outside the monitor, through the existing transport-loss recovery path.
+     */
+    fun expireStartupIfPending(generation: Int): Boolean {
+        val listener = synchronized(this) {
+            if (!active.get() || generation != attachGeneration || firstTcpAccepted) return false
+            val pending = attachment ?: return false
+            releaseLocked()
+            pending.listener
+        }
+        listener.onTransportError("Wired media TCP did not connect after StartSession")
+        return true
+    }
+
     override fun onDestroy() {
         detach()
         super.onDestroy()
@@ -192,7 +218,7 @@ class CarPlayVpnService : VpnService() {
                 socket.keepAlive = true
                 socket.setSoLinger(true, 0)
                 val session = synchronized(this) {
-                    if (!active.get()) {
+                    if (!active.get() || generation != attachGeneration) {
                         socket.close()
                         return
                     }
@@ -201,6 +227,7 @@ class CarPlayVpnService : VpnService() {
                         socket.close()
                         return
                     }
+                    firstTcpAccepted = true
                     AirPlaySession(
                         socket = socket,
                         config = current.config,
@@ -286,6 +313,7 @@ class CarPlayVpnService : VpnService() {
     private fun releaseLocked() {
         attachGeneration += 1
         active.set(false)
+        firstTcpAccepted = false
         attachment = null
         serverSocket?.close()
         serverSocket = null

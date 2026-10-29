@@ -4,6 +4,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class StreamReceiveStatsTest {
+    @Test fun decryptTimingIsSeparateAndResetsWithWindow() {
+        var clock = 0L
+        val lines = mutableListOf<String>()
+        val stats = StreamReceiveStats("video", lines::add) { clock }
+        stats.decrypted(20_000)
+        stats.decrypted(40_000)
+        clock = 5_000_000_000L
+        stats.flush()
+        assertTrue(lines.single().contains("decryptCount=2 decryptAvgUs=30 decryptMaxUs=40"))
+        stats.flush(true)
+        assertTrue(lines.last().contains("decryptCount=0 decryptAvgUs=0 decryptMaxUs=0"))
+    }
+
     @Test fun separatesSocketWaitFromLocalProcessingAndTracksSequenceWrap() {
         var clock = 0L
         val output = mutableListOf<String>()

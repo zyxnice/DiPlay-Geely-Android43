@@ -39,6 +39,13 @@ class NcmUsbBridge internal constructor(
     private var failure: IphoneUsbException? = null
     private var sequence = 0
     private var loggedWriteTimeout = false
+    private val openedAtMillis = SystemClock.elapsedRealtime()
+    private var loggedInitialWriteFailure = false
+    private var loggedFirstInput = false
+    @Volatile private var notifiedLinkUp: Boolean? = null
+    private val startupWrite = NcmStartupWrite(outEndpoint.maxPacketSize, SystemClock::elapsedRealtime)
+    /** True after a complete NTB was accepted by USB OUT; not proof of an AirPlay connection. */
+    fun isOutputReady(): Boolean = startupWrite.ready
     private val frames = ArrayDeque<ByteArray>()
     private var queuedBytes = 0
     private var buffered = ByteArray(0)
@@ -68,19 +75,38 @@ class NcmUsbBridge internal constructor(
             this.sequence.also { this.sequence = (this.sequence + 1) and 0xffff }
         }
         val block = Ntb16Codec.build(frame, sequence)
-        val transferred = if (LegacyUsbTransfer.chunkedWritesRequired) {
-            LegacyUsbTransfer.writeAll(
-                LegacyUsbTransfer.endpointWriter(connection, outEndpoint, block, 0),
-                sourceOffset = 0,
-                length = block.size,
-                deadlineNanos = SystemClock.elapsedRealtime() * NANOS_PER_MILLISECOND +
-                    timeoutMillis * NANOS_PER_MILLISECOND,
-            )
-        } else {
-            connection.bulkTransfer(outEndpoint, block, block.size, timeoutMillis)
+        // The phone can send neighbor solicitations before its OUT endpoint is ready. Previously
+        // every initial timeout discarded a whole packet, including the kernel's only NDP reply.
+        // Keep an initial single-short-packet NTB/sequence until accepted so queued NDP can follow.
+        // Multi-packet NTBs cannot be retried after an opaque negative bulkTransfer result.
+        val transferred = startupWrite.write(
+            blockBytes = block.size,
+            timeoutMillis = timeoutMillis,
+            onWaiting = {
+                loggedWriteTimeout = true
+                Log.i(IphoneCarPlayConfiguration.TAG, "ncm bulk-out not ready; retaining bridge for retry")
+            },
+            onReady = { elapsedMillis, attempts ->
+                Log.i(IphoneCarPlayConfiguration.TAG,
+                    "ncm startup bulk-out ready elapsedMs=$elapsedMillis attempts=$attempts")
+            },
+        ) { attemptTimeout ->
+            checkOpen()
+            if (LegacyUsbTransfer.chunkedWritesRequired) {
+                LegacyUsbTransfer.writeAll(
+                    LegacyUsbTransfer.ChunkTransfer { offset, length, timeout ->
+                        writeChunk(block, offset, length, timeout)
+                    },
+                    sourceOffset = 0,
+                    length = block.size,
+                    deadlineNanos = SystemClock.elapsedRealtime() * NANOS_PER_MILLISECOND +
+                        attemptTimeout * NANOS_PER_MILLISECOND,
+                )
+            } else {
+                writeChunk(block, 0, block.size, attemptTimeout)
+            }
         }
-        // Before StartCarPlaySession the phone keeps the NCM data path NAKed. Android reports the
-        // resulting timeout as -1; it is not a detach and later packets must be allowed to retry.
+        // After the first successful block, preserve the existing per-packet timeout semantics.
         if (transferred <= 0) {
             if (!loggedWriteTimeout) {
                 loggedWriteTimeout = true
@@ -97,6 +123,21 @@ class NcmUsbBridge internal constructor(
             loggedWriteTimeout = false
             Log.i(IphoneCarPlayConfiguration.TAG, "ncm bulk-out became ready")
         }
+    }
+
+    /** Observe the raw Android result before legacy writeAll converts a negative result to zero. */
+    private fun writeChunk(block: ByteArray, offset: Int, length: Int, timeoutMillis: Int): Int {
+        val started = SystemClock.elapsedRealtime()
+        val result = connection.bulkTransfer(outEndpoint, block, offset, length, timeoutMillis)
+        if (result <= 0 && !startupWrite.ready && !loggedInitialWriteFailure) {
+            loggedInitialWriteFailure = true
+            Log.i(IphoneCarPlayConfiguration.TAG,
+                "ncm initial bulk-out failure result=$result bytes=$length " +
+                    "callMs=${SystemClock.elapsedRealtime() - started} timeoutMs=$timeoutMillis " +
+                    "sinceOpenMs=${SystemClock.elapsedRealtime() - openedAtMillis} " +
+                    "linkUp=$notifiedLinkUp endpoint=0x${outEndpoint.address.toString(16)}")
+        }
+        return result
     }
 
     /**
@@ -120,6 +161,12 @@ class NcmUsbBridge internal constructor(
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) readChunkSynchronously(remainingMillis)
                     else readChunk(remainingMillis)
                 ) ?: continue
+                if (!loggedFirstInput) {
+                    loggedFirstInput = true
+                    Log.i(IphoneCarPlayConfiguration.TAG,
+                        "ncm first bulk-in bytes=$chunkLength " +
+                            "sinceOpenMs=${SystemClock.elapsedRealtime() - openedAtMillis} linkUp=$notifiedLinkUp")
+                }
                 appendBuffered(readBuffer, chunkLength)
             }
         }
@@ -178,6 +225,19 @@ class NcmUsbBridge internal constructor(
                     IphoneCarPlayConfiguration.TAG,
                     "ncm status notification bytes=$transferred data=${buffer.copyOf(transferred).hex(32)}",
                 )
+            }
+            // CDC NETWORK_CONNECTION: preserve the first raw notification above, and log only
+            // link transitions thereafter. Speed notifications must not be interpreted as link-up.
+            if (transferred >= 8 && (buffer[0].toInt() and 0xff) == 0xa1 &&
+                buffer[1].toInt() == 0 && readU16(buffer, 6) == 0 && readU16(buffer, 2) in 0..1) {
+                val up = readU16(buffer, 2) == 1
+                if (notifiedLinkUp != up) {
+                    notifiedLinkUp = up
+                    Log.i(IphoneCarPlayConfiguration.TAG,
+                        "ncm link notification up=$up interface=${readU16(buffer, 4)} " +
+                            "sinceOpenMs=${SystemClock.elapsedRealtime() - openedAtMillis} " +
+                            "outputReady=${startupWrite.ready}")
+                }
             }
         }
     }

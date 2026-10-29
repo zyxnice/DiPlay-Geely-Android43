@@ -66,6 +66,7 @@ class AirPlaySession(
     private val listener: AirPlaySessionListener,
     private val media: AirPlayMediaHandler,
 ) : Closeable {
+    internal val mediaPerformance get() = config.mediaPerformance
     internal val pairSetup = PairSetup(identity, pairings)
     internal val pairVerify = PairVerify(identity, pairings)
     internal var cipher: ControlCipher? = null
@@ -91,6 +92,7 @@ class AirPlaySession(
     private var keepAliveSocket: DatagramSocket? = null
     private var keepAliveThread: Thread? = null
     private val eventWriteLock = Any()
+    private val eventSendStats = EventSendStats()
     private val eventThreads = CopyOnWriteArrayList<Thread>()
 
     val host: String = socket.inetAddress?.hostAddress ?: ""
@@ -145,8 +147,18 @@ class AirPlaySession(
             sendCommand(mapOf("type" to "forceKeyFrame", "params" to mapOf("uuid" to uuid)))
     }
 
-    fun sendCommand(command: Map<String, Any?>): Boolean = synchronized(eventWriteLock) {
-        sendCommandLocked(command)
+    fun sendCommand(command: Map<String, Any?>): Boolean {
+        val waitingAt = System.nanoTime()
+        val diagnostic: String?
+        val sent = synchronized(eventWriteLock) {
+            eventSendStats.record(EventSendStats.Stage.LOCK_WAIT, System.nanoTime() - waitingAt)
+            val result = sendCommandLocked(command)
+            diagnostic = eventSendStats.takeIfDue()
+            result
+        }
+        // Keep optional diagnostic I/O out of the event encryption/socket lock.
+        diagnostic?.let { Log.i(TAG, it) }
+        return sent
     }
 
     /**
@@ -171,18 +183,29 @@ class AirPlaySession(
     private fun sendCommandLocked(command: Map<String, Any?>, extraHeaders: String = ""): Boolean {
         val socket = eventSocket ?: return false
         val cipher = eventCipher ?: return false
+        val encodeAt = System.nanoTime()
         eventCseq++
         val body = BplistCodec.encode(command)
         val head = "POST /command RTSP/1.0\r\n" + extraHeaders +
             "Content-Type: $PLIST_CONTENT_TYPE\r\n" +
             "Content-Length: ${body.size}\r\n" +
             "CSeq: $eventCseq\r\n\r\n"
+        val traceAt = System.nanoTime()
+        eventSendStats.record(EventSendStats.Stage.ENCODE, traceAt - encodeAt)
         trace("airplay event tx headers=$head bodyHex=${body.toHex()}")
+        val encryptAt = System.nanoTime()
+        eventSendStats.record(EventSendStats.Stage.TRACE, encryptAt - traceAt)
         return try {
             val bytes = cipher.encrypt(head.toByteArray(Charsets.US_ASCII) + body)
+            val writeAt = System.nanoTime()
+            eventSendStats.record(EventSendStats.Stage.ENCRYPT, writeAt - encryptAt)
             val output = socket.getOutputStream()
-            output.write(bytes)
-            output.flush()
+            try {
+                output.write(bytes)
+                output.flush()
+            } finally {
+                eventSendStats.record(EventSendStats.Stage.WRITE, System.nanoTime() - writeAt)
+            }
             true
         } catch (error: Exception) {
             Log.w(TAG, "airplay event command failed type=${command["type"]}", error)
@@ -654,6 +677,8 @@ class AirPlaySession(
     private fun acceptEvent(server: ServerSocket) {
         try {
             val socket = server.accept()
+            com.shilapi.xcertplay.compat.GeelyMediaPerformance.configureSocket(socket, video = false,
+                mediaPerformance.network, ::debugLog)
             socket.setSoLinger(true, 0)
             debugLog("airplay event connection accepted from ${socket.remoteSocketAddress}")
             eventSocket = socket
@@ -803,8 +828,9 @@ internal fun safeClose(closeable: Any?) {
     }
 }
 
-private fun ByteArray.toHex(): String =
-    joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+// TRACE payloads are preserved byte-for-byte. Avoid creating one Formatter per byte while
+// holding the event write lock: touch reports take this path even when the UI hides TRACE.
+private fun ByteArray.toHex(): String = toHexString()
 
 private fun asMap(value: Any?): Map<String, Any?>? {
     val map = value as? Map<*, *> ?: return null

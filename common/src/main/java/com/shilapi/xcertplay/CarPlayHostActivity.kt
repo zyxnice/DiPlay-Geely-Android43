@@ -312,6 +312,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var activeDisplaySize: DisplaySize? = null
     private var pendingDisplaySize: DisplaySize? = null
     private var sessionDisplay: CarPlaySessionDisplay? = null
+    private var lastVideoGeometryLog: String? = null
     private var touchOutsideContent = false
     private var displayScaleTenths = CarPlayDisplayScale.DEFAULT_TENTHS
     private var uiScalePercent = CarPlayUiScale.DEFAULT
@@ -3428,10 +3429,12 @@ class CarPlayHostActivity : ComponentActivity() {
         videoWidth: Int,
         videoHeight: Int,
         controllerGeneration: Int,
+        performance: com.shilapi.xcertplay.compat.GeelyMediaOptions,
     ): AndroidMediaSink {
         // Capture this session's log: late decoder shutdown must not write into a new session.
         val diagnosticLog = sessionLog
         return AndroidMediaSink(
+            performance = performance,
             surface = null,
             videoWidth = videoWidth,
             videoHeight = videoHeight,
@@ -3648,7 +3651,9 @@ class CarPlayHostActivity : ComponentActivity() {
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress || controller != null) return
         val controllerGeneration = restartGeneration
         val prepared = try {
-            createRuntimeConfig() to createAirPlayConfig(size)
+            createRuntimeConfig() to createAirPlayConfig(size).copy(
+                mediaPerformance = com.shilapi.xcertplay.compat.GeelyMediaPerformance.load(this),
+            )
         } catch (error: IllegalArgumentException) {
             val failed = CarPlayStatus.Failed(error.message ?: "Invalid saved connection settings")
             renderConnectionStatus(failed, statusTitle(failed))
@@ -3657,6 +3662,7 @@ class CarPlayHostActivity : ComponentActivity() {
             return
         }
         val (config, airPlayConfig) = prepared
+        appendLog("Performance: controller options=${airPlayConfig.mediaPerformance}")
         val locationProvider: Iap2LocationProvider? =
             when {
                 !config.locationReportingEnabled -> null
@@ -3691,6 +3697,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 "mfi=${config.mfiTarget}",
         )
         val renderer = createMediaSink(
+            performance = airPlayConfig.mediaPerformance,
             videoWidth = airPlayConfig.main.widthPixels,
             videoHeight = airPlayConfig.main.heightPixels,
             controllerGeneration = controllerGeneration,
@@ -3846,6 +3853,20 @@ class CarPlayHostActivity : ComponentActivity() {
             setScale(content.width / viewWidth, content.height / viewHeight)
             postTranslate(content.left, content.top)
         })
+        val display = sessionDisplay ?: return
+        // Decoder crop is logged by the sink. These are the remaining canvas-to-view dimensions;
+        // display metrics describe the Android window, not a verified physical panel resolution.
+        val metrics = resources.displayMetrics
+        val geometry = "Video geometry canvas=${display.width}x${display.height} " +
+            "view=${viewWidth}x$viewHeight content=${content.width}x${content.height} " +
+            "offset=${content.left},${content.top} " +
+            "pixelScale=${content.width / display.width},${content.height / display.height} " +
+            "windowMetrics=${metrics.widthPixels}x${metrics.heightPixels} " +
+            "barsHidden=${display.hideTopBar},${display.hideBottomBar}"
+        if (geometry != lastVideoGeometryLog) {
+            lastVideoGeometryLog = geometry
+            appendLog(geometry)
+        }
     }
 
     private fun recordDetectedMaximum(size: DisplaySize) {
@@ -4105,7 +4126,7 @@ class CarPlayHostActivity : ComponentActivity() {
             return true
         }
         val contacts = CarPlayTouchMapper.contacts(event, content)
-        val queued = controller?.sendTouch(contacts) ?: false
+        val queued = controller?.sendTouch(contacts, move = event.actionMasked == MotionEvent.ACTION_MOVE) ?: false
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN,
             MotionEvent.ACTION_POINTER_DOWN,

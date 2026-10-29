@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <application android:label="@string/geely_usb_app_name" tools:replace="android:label">
+        <meta-data android:name="com.shilapi.xcertplay.GEELY_MEDIA_STAGE"
+            android:value="${geelyMediaStage}" />
         <!-- Absent in ordinary builds: the code's explicit default is false. -->
         <meta-data
             android:name="com.shilapi.xcertplay.GEELY_USB_RUNTIME_RECOVERY"

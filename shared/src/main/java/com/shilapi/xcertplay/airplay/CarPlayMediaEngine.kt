@@ -18,6 +18,10 @@ interface MediaSink {
     fun onVideoCodec(type: Int, codec: VideoCodec) {}
     fun onVideoConfig(type: Int, codecData: ByteArray) {}
     fun onVideoFrame(type: Int, naluBytes: ByteArray) {}
+    /** Monotonic receive time from System.nanoTime; C includes decrypt-queue time in its decoder age limit. */
+    fun onVideoFrame(type: Int, naluBytes: ByteArray, receivedNs: Long) = onVideoFrame(type, naluBytes)
+    /** Ordered before the next frame after receive-side loss; the decoder must wait for a new keyframe. */
+    fun onVideoDiscontinuity(type: Int, reason: String) {}
     fun setVideoRecoveryHandler(type: Int, handler: () -> Unit) {}
     fun setVideoDiagnosticHandler(type: Int, handler: (String) -> Unit) {}
     fun onScreenStreamActive(type: Int, active: Boolean) {}
@@ -75,8 +79,14 @@ class CarPlayMediaEngine(
     override fun onScreen(session: AirPlaySession, type: Int, stream: Map<String, Any?>): Int? {
         val key = outputKey(session, stream) ?: return null
         val streamKey = StreamKey(session, type)
+        // Retire the previous callback owner before installing handlers for this stream generation.
+        streams.remove(streamKey)?.let { previous ->
+            previous.close()
+            // Callback fencing alone cannot retire frames already queued in the old decoder.
+            sink.onScreenStreamActive(type, false)
+        }
         Log.i(TAG, "airplay screen key connectionID=${unsignedPlistDecimal(stream["streamConnectionID"])}")
-        val screen = ScreenStream(key, session::logDebug)
+        val screen = ScreenStream(key, session::logDebug, session.mediaPerformance)
         sink.setVideoDiagnosticHandler(type) {
             if (it == "first frame rendered") session.videoFrameRendered()
             session.logDebug("Video: $it")
@@ -95,9 +105,21 @@ class CarPlayMediaEngine(
         }
         val port = screen.listen(
             object : ScreenStream.Listener {
-                override fun onCodec(codec: VideoCodec) = sink.onVideoCodec(type, codec)
-                override fun onConfig(codecData: ByteArray) = sink.onVideoConfig(type, codecData)
-                override fun onFrame(naluBytes: ByteArray) = sink.onVideoFrame(type, naluBytes)
+                override fun onCodec(codec: VideoCodec) {
+                    if (streams[streamKey] === screen) sink.onVideoCodec(type, codec)
+                }
+                override fun onConfig(codecData: ByteArray) {
+                    if (streams[streamKey] === screen) sink.onVideoConfig(type, codecData)
+                }
+                override fun onFrame(naluBytes: ByteArray) {
+                    if (streams[streamKey] === screen) sink.onVideoFrame(type, naluBytes)
+                }
+                override fun onFrame(naluBytes: ByteArray, receivedNs: Long) {
+                    if (streams[streamKey] === screen) sink.onVideoFrame(type, naluBytes, receivedNs)
+                }
+                override fun onDiscontinuity(reason: String) {
+                    if (streams[streamKey] === screen) sink.onVideoDiscontinuity(type, reason)
+                }
                 override fun onClosed(cause: Throwable?) {
                     Log.w(
                         TAG,
@@ -105,8 +127,8 @@ class CarPlayMediaEngine(
                     )
                     if (streams.remove(streamKey, screen)) {
                         sink.onScreenStreamActive(type, false)
+                        session.close()
                     }
-                    session.close()
                 }
             },
         )
@@ -147,7 +169,7 @@ class CarPlayMediaEngine(
 
         val capture = audioCaptureDirectory?.let { AudioPacketCapture(it, type) }
         if (capture != null) audioCaptures[streamKey] = capture
-        val audio = AudioStream(key, type, session::logDebug)
+        val audio = AudioStream(key, type, session::logDebug, session.mediaPerformance)
         val (dataPort, controlPort) = audio.listen(
             object : AudioStream.Listener {
                 override fun onStarted(firstSample: Int) {

@@ -29,6 +29,10 @@ class Iap2WiredControlClient(
         vehicleStatusProvider: VehicleStatusProvider? = null,
         onIncoming: (Iap2Frame) -> Unit = {},
         onProgress: (String) -> Unit = {},
+        // Null keeps callers without an NCM/TCP owner on their existing control-only behavior.
+        mediaStartupState: (() -> WiredMediaStartupState)? = null,
+        // Atomically expires this attachment only if no TCP has won; false leaves control alive.
+        expireMediaStartup: () -> Boolean = { false },
     ): Iap2WiredControlResult {
         require(availableCurrentMilliAmps in 0..0xffff) {
             "availableCurrentMilliAmps must be in 0..65535"
@@ -57,17 +61,48 @@ class Iap2WiredControlClient(
 
         var forwardedFrames = 0
         var carPlayStartSessions = 0
+        val mediaStartup = mediaStartupState?.let { WiredMediaStartup() }
         val location = Iap2LocationReporter(locationProvider, onProgress)
         val vehicleStatus = Iap2VehicleStatusReporter(vehicleStatusProvider, onProgress)
         try {
             while (true) {
+                if (session.isClosed) {
+                    return Iap2WiredControlResult(
+                        Iap2WiredControlTerminal.CHANNEL_CLOSED, stage, forwardedFrames, carPlayStartSessions,
+                    )
+                }
+                if (mediaStartup?.isWatching == true && mediaStartupState != null) {
+                    val state = mediaStartupState()
+                    when (mediaStartup.poll(System.nanoTime() / NANOS_PER_MILLISECOND, state.outputReady, state.tcpAccepted)) {
+                        WiredMediaStartup.Action.REANNOUNCE -> {
+                            // Recheck at dispatch, but never hold the service monitor during CSM I/O.
+                            if (!mediaStartupState().tcpAccepted && !session.isClosed) {
+                                send(carPlayStartSession(endpoint), deadlineNanos)
+                                carPlayStartSessions++
+                                onProgress("iap2 media startup: USB OUT ready; reannounced start-session once while first TCP is pending")
+                            }
+                        }
+                        WiredMediaStartup.Action.TIMED_OUT -> {
+                            if (expireMediaStartup()) {
+                                onProgress("iap2 media startup: no first TCP within 25000ms; ended stalled attachment")
+                                return Iap2WiredControlResult(
+                                    Iap2WiredControlTerminal.NO_MEDIA_TCP, stage, forwardedFrames, carPlayStartSessions,
+                                )
+                            }
+                            mediaStartup.disarm()
+                        }
+                        WiredMediaStartup.Action.NONE -> Unit
+                    }
+                }
                 val remaining = remainingMillis(deadlineNanos)
                 if (remaining == 0L) {
                     return Iap2WiredControlResult(Iap2WiredControlTerminal.TIMED_OUT, stage, forwardedFrames, carPlayStartSessions)
                 }
                 location.tick { send(it, deadlineNanos) }
                 vehicleStatus.tick { send(it, deadlineNanos) }
-                val pollTimeout = vehicleStatus.pollTimeout(location.pollTimeout(remaining))
+                val reporterTimeout = vehicleStatus.pollTimeout(location.pollTimeout(remaining))
+                val pollTimeout = if (mediaStartup?.isWatching != true) reporterTimeout
+                    else minOf(reporterTimeout, WiredMediaStartup.POLL_MILLIS)
                 val incoming = session.recv(pollTimeout)
                 if (incoming == null) {
                     if (session.isClosed) {
@@ -95,10 +130,15 @@ class Iap2WiredControlClient(
                         onProgress(carPlayAvailabilitySummary(incoming.payload))
                         // LIVI sends its wired answer on every availability notification; do not gate it on
                         // the phone's advertised availability boolean.
+                        val startupState = mediaStartupState?.invoke()
                         send(carPlayStartSession(endpoint), deadlineNanos)
                         stage = Iap2WiredControlStage.CARPLAY_START_SENT
                         carPlayStartSessions++
                         onProgress("iap2 tx=0x4301 carplay-start-session")
+                        startupState?.let { state ->
+                            mediaStartup?.startSent(System.nanoTime() / NANOS_PER_MILLISECOND, state.outputReady)
+                            onProgress("iap2 media startup armed outputReady=${state.outputReady} tcpAccepted=${state.tcpAccepted}")
+                        }
                     }
 
                     Iap2LocationMessages.START_LOCATION_INFORMATION, Iap2LocationMessages.STOP_LOCATION_INFORMATION -> {
@@ -215,7 +255,15 @@ enum class Iap2WiredControlStage {
     CARPLAY_START_SENT,
 }
 
-enum class Iap2WiredControlTerminal { CHANNEL_CLOSED, TIMED_OUT }
+enum class Iap2WiredControlTerminal { CHANNEL_CLOSED, TIMED_OUT, NO_MEDIA_TCP }
+
+/** Snapshot supplied by the live NCM and AirPlay owners, scoped to this control attachment. */
+data class WiredMediaStartupState(
+    /** A complete NCM block has reached USB OUT; does not imply phone network readiness. */
+    val outputReady: Boolean,
+    /** The listener accepted at least one TCP connection during this attachment. */
+    val tcpAccepted: Boolean,
+)
 
 /** End state of the control loop only; it is not evidence of NCM or AirPlay availability. */
 data class Iap2WiredControlResult(

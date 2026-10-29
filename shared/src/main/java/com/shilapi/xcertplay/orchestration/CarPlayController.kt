@@ -184,6 +184,8 @@ class CarPlayController(
     )
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val touchExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val inputQueue = CarPlayInputQueue(touchExecutor,
+        report = { Log.i(IphoneCarPlayConfiguration.TAG, it) })
     private val tunnelExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val hostId = UUID.randomUUID().toString().uppercase(Locale.US)
@@ -412,14 +414,17 @@ class CarPlayController(
         }
     }
 
-    fun sendTouch(contacts: List<AirPlayContact>): Boolean {
+    /**
+     * Queues normalized contacts; true means admitted, not delivered. Only ACTION_MOVE callers
+     * may set [move]; default preserves every report, including explicit empty-list releases.
+     * The 8600 B/C candidate replaces pending moves, never contact transitions or commands.
+     */
+    fun sendTouch(contacts: List<AirPlayContact>, move: Boolean = false): Boolean {
         if (closed) return false
         val session = activeSession ?: return false
-        return try {
-            touchExecutor.execute { session.sendTouch(contacts) }
-            true
-        } catch (_: Exception) {
-            false
+        return inputQueue.touch(session, contacts,
+            move && session.mediaPerformance.stage in listOf("B", "C")) { queuedContacts ->
+            !closed && activeSession === session && session.sendTouch(queuedContacts)
         }
     }
 
@@ -428,22 +433,16 @@ class CarPlayController(
     fun requestSiri(): Boolean {
         if (closed) return false
         val session = activeSession ?: return false
-        return try {
-            touchExecutor.execute { session.invokeSiri() }
-            true
-        } catch (_: Exception) {
-            false
+        return inputQueue.command {
+            if (!closed && activeSession === session) session.invokeSiri()
         }
     }
 
     fun sendMediaButton(index: Int): Boolean {
         if (closed) return false
         val session = activeSession ?: return false
-        return try {
-            touchExecutor.execute { session.sendMedia(index) }
-            true
-        } catch (_: Exception) {
-            false
+        return inputQueue.command {
+            if (!closed && activeSession === session) session.sendMedia(index)
         }
     }
 
@@ -463,6 +462,7 @@ class CarPlayController(
         availabilityPollGeneration.incrementAndGet()
         wirelessGeneration.incrementAndGet()
         permissionPollGeneration += 1
+        inputQueue.close()
         touchExecutor.shutdownNow()
         tunnelExecutor.shutdownNow()
         val service = vpnService
@@ -1783,6 +1783,8 @@ class CarPlayController(
             )
             onStatus(CarPlayStatus.RunningControl)
             debugLog("wired iAP2 control starting")
+            val attachedVpn = vpnService
+            val attachedGeneration = attachedVpn?.startupGeneration()
             val result = Iap2WiredControlClient(csm, Iap2MfiAuthenticationClient(mfi)).run(
                 identification = config.identification,
                 endpoint = endpoint,
@@ -1792,10 +1794,26 @@ class CarPlayController(
                 vehicleStatusProvider = vehicleStatusProvider,
                 onIncoming = ::onRouteFrame,
                 onProgress = { message -> debugLog("wired $message") },
+                mediaStartupState = {
+                    com.shilapi.xcertplay.transport.WiredMediaStartupState(
+                        outputReady = ncm.isOutputReady(),
+                        tcpAccepted = closed || attachedGeneration == null ||
+                            attachedVpn.hasAcceptedConnection(attachedGeneration) != false,
+                    )
+                },
+                expireMediaStartup = {
+                    !closed && attachedGeneration != null &&
+                        attachedVpn.expireStartupIfPending(attachedGeneration)
+                },
             )
+            if (result.terminal == Iap2WiredControlTerminal.NO_MEDIA_TCP) {
+                // The attachment owner already atomically expired it and notified transport loss.
+                return
+            }
             onStatus(
                 when (result.terminal) {
                     Iap2WiredControlTerminal.TIMED_OUT -> CarPlayStatus.ControlEnded
+                    Iap2WiredControlTerminal.NO_MEDIA_TCP -> CarPlayStatus.ControlEnded
                     Iap2WiredControlTerminal.CHANNEL_CLOSED ->
                         CarPlayStatus.Failed("CarPlay control channel closed")
                 },

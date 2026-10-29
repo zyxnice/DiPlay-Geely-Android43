@@ -30,6 +30,7 @@ class AudioStream(
     private val key: ByteArray,
     private val streamType: Int = -1,
     private val onDiagnostic: (String) -> Unit = {},
+    performance: com.shilapi.xcertplay.compat.GeelyMediaOptions = com.shilapi.xcertplay.compat.GeelyMediaOptions(),
 ) : Closeable {
     interface Listener {
         fun onStarted(firstSample: Int) {}
@@ -43,6 +44,7 @@ class AudioStream(
     }
 
     private val closed = AtomicBoolean(false)
+    private val crypto = MediaFrameCrypto(performance.nativeMedia, onDiagnostic)
     private val receivedPackets = AtomicInteger()
     private val decryptedPackets = AtomicInteger()
     private val authenticationFailures = AtomicInteger()
@@ -84,7 +86,7 @@ class AudioStream(
     }
 
     private fun runData(socket: DatagramSocket, listener: Listener) {
-        val stats = StreamReceiveStats("audio type=$streamType", onDiagnostic)
+        val stats = StreamReceiveStats("audio type=$streamType", onDiagnostic, cryptoDetails = { crypto.snapshot().toString() })
         val buffer = ByteArray(DATAGRAM_BYTES)
         try {
             while (!closed.get()) {
@@ -129,7 +131,12 @@ class AudioStream(
                 val sample = readU32Be(wire, 4)
 
                 val payload = try {
-                    AirPlayCrypto.chachaOpen(key, nonce, sealed, aad)
+                    val decryptStarted = System.nanoTime()
+                    try {
+                        crypto.open(key, nonce, sealed, aad)
+                    } finally {
+                        stats.decrypted(System.nanoTime() - decryptStarted)
+                    }
                 } catch (error: Exception) {
                     val failureNumber = authenticationFailures.incrementAndGet()
                     if (failureNumber == 1) {

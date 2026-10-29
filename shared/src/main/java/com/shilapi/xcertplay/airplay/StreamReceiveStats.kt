@@ -4,6 +4,7 @@ package com.shilapi.xcertplay.airplay
 internal class StreamReceiveStats(
     private val label: String,
     private val report: (String) -> Unit,
+    private val cryptoDetails: () -> String = { "" },
     private val nowNs: () -> Long = System::nanoTime,
 ) {
     private var windowStart = nowNs()
@@ -23,6 +24,16 @@ internal class StreamReceiveStats(
     private var lastSequenceGap = "none"
     private var lastSequenceGapAtMs = -1L
     private var lateOrDuplicate = 0
+    private var decryptCount = 0L
+    private var decryptNs = 0L
+    private var decryptMaxNs = 0L
+
+    /** Pure decrypt-call duration, including failed authentication; excludes downstream callbacks. */
+    fun decrypted(elapsedNs: Long) {
+        decryptCount++
+        decryptNs += elapsedNs.coerceAtLeast(0L)
+        decryptMaxNs = maxOf(decryptMaxNs, elapsedNs)
+    }
 
     fun reading() { readStart = nowNs() }
 
@@ -66,7 +77,9 @@ internal class StreamReceiveStats(
             "processMaxUs=${maxProcessNs / 1000} seqForwardGaps=$forwardGapPackets " +
             "lateOrDuplicate=$lateOrDuplicate interArrivalMaxMs=${maxInterArrivalNs / 1_000_000} " +
             "seqGapEvents=$sequenceGapEvents seqGapMax=$maxSequenceGap " +
-            "seqGapLast=[$lastSequenceGap] seqGapAtMs=$lastSequenceGapAtMs ended=$ended") }
+            "seqGapLast=[$lastSequenceGap] seqGapAtMs=$lastSequenceGapAtMs ended=$ended " +
+            "decryptCount=$decryptCount decryptAvgUs=${if (decryptCount == 0L) 0 else decryptNs / decryptCount / 1000} " +
+            "decryptMaxUs=${decryptMaxNs / 1000} cryptoCumulative=${cryptoDetails()}") }
         windowStart = now
         packets = 0
         bytes = 0
@@ -79,6 +92,9 @@ internal class StreamReceiveStats(
         lastSequenceGap = "none"
         lastSequenceGapAtMs = -1L
         lateOrDuplicate = 0
+        decryptCount = 0
+        decryptNs = 0
+        decryptMaxNs = 0
     }
 
     private fun Int.toUnsignedLong(): Long = toLong() and 0xffff_ffffL

@@ -40,6 +40,8 @@ android {
         externalNativeBuild {
             ndkBuild {
                 arguments 'APP_PLATFORM=android-18'
+                // C inherits B's authenticated native media path; A must not include it.
+                arguments "GEELY_NATIVE_MEDIA=${providers.gradleProperty('geelyPerformanceStage').getOrElse('off') in ['B', 'C'] ? '1' : '0'}"
             }
         }
 

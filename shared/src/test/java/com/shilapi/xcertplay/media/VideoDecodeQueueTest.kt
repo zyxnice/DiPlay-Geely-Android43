@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay.media
 
 import com.shilapi.xcertplay.airplay.VideoCodec
+import java.io.IOException
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -29,7 +30,7 @@ class VideoDecodeQueueTest {
         queue.offer(VideoJob.Frame(byteArrayOf(3)))
         assertSame(config, queue.poll(0))
         assertSame(surface, queue.poll(0))
-        assertEquals(VideoJob.Resync, queue.poll(0))
+        assertEquals(VideoJob.Resync(), queue.poll(0))
         assertArrayEquals(byteArrayOf(3), (queue.poll(0) as VideoJob.Frame).nalus)
         assertNull(queue.poll(0))
     }
@@ -38,10 +39,10 @@ class VideoDecodeQueueTest {
         val queue = VideoDecodeQueue(maxFrames = 8, maxBytes = 5)
         queue.offer(VideoJob.Frame(ByteArray(3)))
         queue.offer(VideoJob.Frame(ByteArray(3)))
-        assertEquals(VideoJob.Resync, queue.poll(0))
+        assertEquals(VideoJob.Resync(), queue.poll(0))
         assertEquals(3, (queue.poll(0) as VideoJob.Frame).nalus.size)
         queue.offer(VideoJob.Frame(ByteArray(6)))
-        assertEquals(VideoJob.Resync, queue.poll(0))
+        assertEquals(VideoJob.Resync(), queue.poll(0))
         assertNull(queue.poll(0))
     }
 
@@ -61,6 +62,101 @@ class VideoDecodeQueueTest {
         }
         assertEquals(listOf(1, 2, 3), submitted)
         assertEquals(6, dequeues)
+    }
+
+    @Test fun receiveDiscontinuityPreservesControlsAndOrdersRecoveryBeforeNewKeyframe() {
+        val queue = VideoDecodeQueue()
+        val config = VideoJob.Config(VideoCodec.H264, byteArrayOf(1))
+        val surface = VideoJob.SurfaceChanged(null)
+        queue.offer(config)
+        queue.offer(VideoJob.Frame(byteArrayOf(1)))
+        queue.offer(surface)
+        queue.offer(VideoJob.Resync("receive queue expired"))
+        val nextKeyframe = VideoJob.Frame(byteArrayOf(0, 0, 0, 1, 0x65))
+        queue.offer(nextKeyframe)
+        assertSame(config, queue.poll(0))
+        assertSame(surface, queue.poll(0))
+        assertEquals(VideoJob.Resync("receive queue expired"), queue.poll(0))
+        assertSame(nextKeyframe, queue.poll(0))
+        assertNull(queue.poll(0))
+    }
+
+    @Test fun closedQueueReleasesBuffersAndRejectsLateCallbacks() {
+        val queue = VideoDecodeQueue()
+        queue.offer(VideoJob.Frame(ByteArray(100)))
+        queue.close()
+        queue.offer(VideoJob.Config(VideoCodec.H264, byteArrayOf(1)))
+        queue.offer(VideoJob.Frame(byteArrayOf(2)))
+        queue.offer(VideoJob.Resync("late callback"))
+        assertNull(queue.poll(0))
+    }
+
+    @Test fun cControlFloodFailsExplicitlyWithoutDroppingAcceptedConfigurations() {
+        val queue = VideoDecodeQueue(maxFrames = 10, maxBytes = 100, boundedControls = true)
+        val first = VideoJob.Config(VideoCodec.H264, byteArrayOf(1))
+        val second = VideoJob.Config(VideoCodec.H265, byteArrayOf(2))
+        queue.offer(first)
+        queue.offer(second)
+        try {
+            queue.offer(VideoJob.Config(VideoCodec.H264, byteArrayOf(3)))
+            fail("Unbounded configuration flood must fail the receive path")
+        } catch (_: IOException) { }
+        assertSame(first, queue.poll(0))
+        assertSame(second, queue.poll(0))
+        assertNull(queue.poll(0))
+    }
+
+    @Test fun cCountsConfigurationAndFrameBytesInOneMemoryBudget() {
+        val queue = VideoDecodeQueue(maxFrames = 10, maxBytes = 5, boundedControls = true)
+        val config = VideoJob.Config(VideoCodec.H264, ByteArray(3))
+        queue.offer(config)
+        queue.offer(VideoJob.Frame(ByteArray(3)))
+        assertSame(config, queue.poll(0))
+        assertEquals(VideoJob.Resync(), queue.poll(0))
+        assertNull(queue.poll(0))
+
+        queue.offer(VideoJob.Frame(ByteArray(3)))
+        try {
+            queue.offer(config)
+            fail("CSD cannot bypass the total payload budget")
+        } catch (_: IOException) { }
+        assertEquals(3, (queue.poll(0) as VideoJob.Frame).nalus.size)
+        assertNull(queue.poll(0))
+    }
+
+    @Test fun cRejectsSingleOversizedConfigurationRatherThanDroppingItSilently() {
+        val queue = VideoDecodeQueue(maxBytes = 5, boundedControls = true)
+        try {
+            queue.offer(VideoJob.Config(VideoCodec.H264, ByteArray(6)))
+            fail("Oversized CSD must terminate the producer path")
+        } catch (_: IOException) { }
+        assertNull(queue.poll(0))
+    }
+
+    @Test fun cCoalescesPendingSurfaceAndRecoveryControlsAndCapsTotalJobCount() {
+        val queue = VideoDecodeQueue(maxFrames = 10, maxBytes = 100, boundedControls = true)
+        val first = VideoJob.Config(VideoCodec.H264, byteArrayOf(1))
+        val second = VideoJob.Config(VideoCodec.H264, byteArrayOf(2))
+        queue.offer(first)
+        repeat(100) { queue.offer(VideoJob.SurfaceChanged(null)) }
+        val finalSurface = VideoJob.SurfaceChanged(null)
+        queue.offer(finalSurface)
+        queue.offer(second)
+        repeat(100) { queue.offer(VideoJob.Resync("gap-$it")) }
+        repeat(10) { queue.offer(VideoJob.Frame(byteArrayOf(it.toByte()))) }
+        assertSame(first, queue.poll(0))
+        assertSame(finalSurface, queue.poll(0))
+        assertSame(second, queue.poll(0))
+        assertEquals(VideoJob.Resync("gap-99"), queue.poll(0))
+        repeat(10) { assertTrue(queue.poll(0) is VideoJob.Frame) }
+        assertNull(queue.poll(0)) // At most 10 frames + 2 config + 1 surface + 1 resync.
+    }
+
+    @Test fun bKeepsItsExistingControlQueueContract() {
+        val queue = VideoDecodeQueue(maxBytes = 1)
+        repeat(3) { queue.offer(VideoJob.Config(VideoCodec.H264, ByteArray(2))) }
+        repeat(3) { assertTrue(queue.poll(0) is VideoJob.Config) }
+        assertNull(queue.poll(0))
     }
 
     @Test fun stalledDecoderHasFiniteWaitAndShutdownCancelsImmediately() {

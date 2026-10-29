@@ -374,6 +374,7 @@ class DiPlayActivity : ComponentActivity() {
             card.addView(button(selectedPhoneButtonLabel(), false) { choosePhone() }, matchButton(12, 60))
         }
         section(content, getString(R.string.display_and_performance), R.drawable.ic_dp_display) { card ->
+            geelyPerformanceControls(card)
             carPlaySizeControl(card)
             choice(card, getString(R.string.resolution), listOf(getString(R.string.resolution_native), getString(R.string.s_80_lighter_load), getString(R.string.s_60_lightest_load)), listOf(10, 8, 6).indexOf(AirPlayPersistence.loadDisplayScaleTenths(this)).coerceAtLeast(0)) { AirPlayPersistence.saveDisplayScaleTenths(this, listOf(10, 8, 6)[it]) }
             val bufferPresets = com.shilapi.xcertplay.media.MediaAudioBuffer.presets
@@ -1890,12 +1891,46 @@ class DiPlayActivity : ComponentActivity() {
         build(card)
         parent.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
     }
-    private fun toggle(parent: LinearLayout, title: String, description: String, value: Boolean, save: (Boolean) -> Unit) {
+    private fun geelyPerformanceControls(card: LinearLayout) {
+        val settings = com.shilapi.xcertplay.compat.GeelyMediaPerformance
+        val options = settings.load(this)
+        if (options.stage == "off") return
+        val nextConnection = "修改后请断开 CarPlay 并重新打开连接，当前播放保持原设置。"
+        toggle(card, "8600 基础流畅度优化（${options.stage}）", nextConnection, options.network) {
+            settings.save(this, settings.NETWORK, it)
+        }
+        toggle(card, "优先处理画面（实验）", "可能影响音乐连续性；默认关闭。$nextConnection", options.urgentVideo) {
+            settings.save(this, settings.URGENT_VIDEO, it)
+        }
+        if (options.stage == "B" || options.stage == "C") {
+            toggle(card, "音视频快速解密（实验）", "不支持时自动使用原方式。$nextConnection", options.nativeMedia) {
+                settings.save(this, settings.NATIVE_MEDIA, it)
+            }
+        }
+        if (options.stage == "C") {
+            var queueEnabled = options.videoQueue
+            lateinit var recoverySwitch: Switch
+            toggle(card, "画面接收优化（实验）", "限制画面积压，关闭可对照原版接收方式。$nextConnection", options.videoQueue) {
+                queueEnabled = it
+                settings.save(this, settings.VIDEO_QUEUE, it)
+                if (!it) recoverySwitch.isChecked = false
+                recoverySwitch.isEnabled = it
+            }
+            recoverySwitch = toggle(card, "卡顿快速恢复（实验）", "需开启画面接收优化；首次对照请保持关闭。$nextConnection", options.softVideoRecovery) {
+                settings.save(this, settings.SOFT_VIDEO_RECOVERY, queueEnabled && it)
+            }
+            recoverySwitch.isEnabled = queueEnabled
+        }
+    }
+
+    private fun toggle(parent: LinearLayout, title: String, description: String, value: Boolean, save: (Boolean) -> Unit): Switch {
         val line = row().apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(12), 0, dp(12)) }
         val text = column(); text.addView(label(title, 18, TEXT, true)); text.addView(label(description, 14, MUTED).apply { setPadding(0, dp(6), dp(16), 0) })
         line.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-        line.addView(Switch(this).apply { contentDescription = title; isChecked = value; minHeight = dp(56); tintButtonCompat(ACCENT); setOnCheckedChangeListener { _, checked -> save(checked) } })
+        val control = Switch(this).apply { contentDescription = title; isChecked = value; minHeight = dp(56); tintButtonCompat(ACCENT); setOnCheckedChangeListener { _, checked -> save(checked) } }
+        line.addView(control)
         parent.addView(line)
+        return control
     }
     private fun choice(parent: LinearLayout, title: String, options: List<String>, current: Int, reconnects: Boolean = true, save: (Int) -> Unit) {
         var selection = current

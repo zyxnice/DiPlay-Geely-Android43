@@ -51,4 +51,6 @@ data class AirPlayConfig(
     val icons: List<AirPlayIcon> = emptyList(),
     /** iOS 27 video in car (see [VideoInCar]); video plays only while [VideoInCar.allowed]. */
     val videoInCar: Boolean = false,
+    /** Local media options fixed for this controller; not part of AirPlay advertisement or authentication. */
+    val mediaPerformance: com.shilapi.xcertplay.compat.GeelyMediaOptions = com.shilapi.xcertplay.compat.GeelyMediaOptions(),
 )

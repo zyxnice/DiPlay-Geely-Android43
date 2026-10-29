@@ -6,6 +6,10 @@ plugins {
 val localAuthenticationAssets = providers.environmentVariable("DIPLAY_AUTH_ASSETS_DIR")
     .orNull?.let { file(it).canonicalFile }
 
+// Explicit candidate identity; ordinary builds keep their existing behaviour.
+val geelyPerformanceStage = providers.gradleProperty("geelyPerformanceStage").getOrElse("off")
+require(geelyPerformanceStage in listOf("off", "A", "B", "C")) { "Expected geelyPerformanceStage=off, A, B or C" }
+
 android {
     namespace = "com.shilapi.xcertplay"
     compileSdk {
@@ -46,7 +50,8 @@ android {
         create("geelyUsb") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".repair1.geely8600"
-            versionNameSuffix = "-H53-USB2"
+            versionNameSuffix = if (geelyPerformanceStage == "off") "-H53-USB2" else "-H53-USB3-$geelyPerformanceStage"
+            manifestPlaceholders["geelyMediaStage"] = geelyPerformanceStage
             matchingFallbacks += listOf("debug")
         }
         release {
